@@ -1,7 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 
 use super::EchoCanvas;
-use crate::app::{LogLevel, Report};
+use crate::app::{EchoSubTab, LogLevel, Report};
 use crate::result::{EchoError, EchoResult};
 use crate::{
     app::SelectedTab,
@@ -26,8 +26,35 @@ impl EchoCanvas {
             KeyCode::Right => self.next_tab(),
             KeyCode::Left => self.previous_tab(),
 
-            KeyCode::Char('w') => self.state.previous_local_song(),
-            KeyCode::Char('s') => self.state.next_local_song(),
+            KeyCode::Char('w') => match self.state.selected_tab {
+                SelectedTab::Echo => match self.state.echo_subtab {
+                    EchoSubTab::SEARCH => self.state.previous_local_song(),
+                    EchoSubTab::INFO => {}
+                    EchoSubTab::METADATA => {}
+                },
+                _ => {}
+            },
+            KeyCode::Char('s') => match self.state.selected_tab {
+                SelectedTab::Echo => match self.state.echo_subtab {
+                    EchoSubTab::SEARCH => self.state.next_local_song(),
+                    EchoSubTab::INFO => {}
+                    EchoSubTab::METADATA => {}
+                },
+                _ => {}
+            },
+
+            KeyCode::Char('M') => match self.state.selected_tab {
+                SelectedTab::Echo => {
+                    self.state.switch_echo_subtab('M');
+                }
+                _ => {}
+            },
+            KeyCode::Char('S') => match self.state.selected_tab {
+                SelectedTab::Echo => {
+                    self.state.switch_echo_subtab('S');
+                }
+                _ => {}
+            },
 
             KeyCode::Enter => match self.state.selected_tab {
                 SelectedTab::Echo => {
@@ -37,13 +64,17 @@ impl EchoCanvas {
                             let audio_player = match AudioPlayer::new(&v.path) {
                                 Ok(player) => player,
                                 Err(e) => {
-                                    reporter.send(Report {
-                                        log: Some(EchoError::LockPoisoned(e.to_string())),
-                                        level: LogLevel::ERR
-                                    }).ok();
+                                    reporter
+                                        .send(Report {
+                                            log: Some(EchoError::LockPoisoned(e.to_string())),
+                                            level: LogLevel::ERR,
+                                        })
+                                        .ok();
                                     AudioPlayer::bad()
                                 }
                             };
+                            self.state.current_song =
+                                self.state.local_songs[self.state.selected_song_pos].to_owned();
                             self.audio_player = audio_player;
 
                             let mut audio_state = Some(self.audio_player.state.clone());

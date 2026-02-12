@@ -1,7 +1,7 @@
 use chrono::Local;
 use std::{
     io::stdout,
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc::Receiver},
 };
 
 use ratatui::{
@@ -17,10 +17,13 @@ use tokio::{
     time::{self, Duration, Interval},
 };
 
-use crate::{app::{LogLevel, Report}, awdio::AudioPlayer};
 use crate::config::Config;
 use crate::result::EchoResult;
 use crate::{app::State, awdio::AudioData};
+use crate::{
+    app::{LogLevel, Report},
+    awdio::AudioPlayer,
+};
 
 pub mod canvas;
 pub mod components;
@@ -31,7 +34,7 @@ pub struct EchoCanvas {
     config: Config,
     audio_player: AudioPlayer,
     audio_state: Option<Arc<Mutex<AudioData>>>,
-    report_rx: Receiver<Report>
+    report_rx: Receiver<Report>,
 }
 
 impl EchoCanvas {
@@ -40,14 +43,14 @@ impl EchoCanvas {
         config: Config,
         audio_state: Option<Arc<Mutex<AudioData>>>,
         audio_player: AudioPlayer,
-        report_rx: Receiver<Report>
+        report_rx: Receiver<Report>,
     ) -> Self {
         EchoCanvas {
             state,
             config,
             audio_player,
             audio_state,
-            report_rx
+            report_rx,
         }
     }
 

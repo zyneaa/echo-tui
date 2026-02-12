@@ -1,13 +1,17 @@
 use ratatui::{
     layout::Constraint,
-    style::{Color, Modifier, Style, Styled},
+    style::{Color, Modifier, Style},
     symbols::border,
     text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table},
 };
 use strum::IntoEnumIterator;
+// use tracing::{debug, error, info, trace, warn};
 
-use crate::{app::SelectedTab, awdio::song::Song};
+use crate::{
+    app::{EchoSubTab, SelectedTab},
+    awdio::song::Song,
+};
 
 pub fn bordered_block(title: Line<'static>, color: Color) -> Block<'static> {
     Block::bordered()
@@ -59,48 +63,42 @@ pub fn tabs(
 pub fn local_songs_table(
     songs: &Vec<Song>,
     fg: Color,
-    bg: Color,
-    accent: Color,
+    _bg: Color,
+    _accent: Color,
     title: Color,
     selected_song_pos: &usize,
+    echo_subtab: &EchoSubTab,
 ) -> Table<'static> {
-    let selected_row_style = Style::default().add_modifier(Modifier::REVERSED).fg(title);
-
-    let header = ["Name", "Artist", "Album"]
-        .into_iter()
-        .map(|s| Cell::from(Text::from(s).style(Style::default().fg(fg))))
-        .collect::<Row>()
-        .height(1);
+    let selected_row_style;
+    match echo_subtab {
+        EchoSubTab::SEARCH => {
+            selected_row_style = Style::default().add_modifier(Modifier::REVERSED).fg(title);
+        },
+        _ => selected_row_style = Style::default()
+    }
 
     let rows = songs.iter().enumerate().map(|(i, data)| {
-        let row_style = if i == *selected_song_pos {
+        let is_selected = i == *selected_song_pos;
+        let row_style = if is_selected {
             selected_row_style
         } else {
-            Style::default().style().fg(fg)
+            Style::default().fg(fg)
         };
 
         let item = data.ref_array();
+        let (name, artist) = (item[0], item[1]);
 
-        item.into_iter()
-            .map(|content| {
-                Cell::from(Text::from(format!(
-                    "\n{}\n",
-                    content.as_deref().unwrap_or_default()
-                )))
-            })
-            .collect::<Row>()
-            .height(2)
-            .style(row_style)
+        Row::new(vec![
+            Cell::from(Text::from(name.clone())),
+            Cell::from(Text::from(artist.clone())),
+        ])
+        .height(1)
+        .style(row_style)
     });
 
-    let t = Table::new(
+    Table::new(
         rows,
-        [
-            Constraint::Percentage(60),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-        ],
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
     )
-    .header(header);
-    t
+    .row_highlight_style(selected_row_style)
 }

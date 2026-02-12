@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use crate::awdio::metadata;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Song {
     pub metadata: metadata::Metadata,
     pub path: String,
@@ -16,7 +16,7 @@ impl Song {
         }
     }
 
-    pub fn ref_array(&self) -> [&Option<String>; 3] {
+    pub fn ref_array(&self) -> [&String; 3] {
         [
             &self.metadata.title,
             &self.metadata.artist,

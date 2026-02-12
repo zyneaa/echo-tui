@@ -98,9 +98,16 @@ impl Default for Report {
     fn default() -> Self {
         Report {
             log: None,
-            level: LogLevel::INFO
+            level: LogLevel::INFO,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum EchoSubTab {
+    SEARCH,
+    INFO,
+    METADATA
 }
 
 #[derive(Debug)]
@@ -109,6 +116,8 @@ pub struct State {
     pub selected_tab: SelectedTab,
     pub input: String,
     pub animations: AnimationState,
+
+    pub current_song: Song,
 
     pub uptime: Duration,
     pub uptime_readable: String,
@@ -120,6 +129,9 @@ pub struct State {
 
     // Logging
     pub report_tx: Sender<Report>,
+
+    // Sub tabs
+    pub echo_subtab: EchoSubTab
 }
 
 impl State {
@@ -129,12 +141,14 @@ impl State {
             selected_tab: SelectedTab::default(),
             input: "".into(),
             animations: AnimationState::default(),
+            current_song: Song::default(),
             uptime: Duration::default(),
             uptime_readable: "".into(),
             current_clock: "".into(),
             selected_song_pos: 0,
             local_songs: Vec::new(),
-            report_tx: tx
+            report_tx: tx,
+            echo_subtab: EchoSubTab::SEARCH
         }
     }
 
@@ -196,6 +210,15 @@ impl State {
     pub fn previous_tab(&mut self) {
         self.selected_tab = self.selected_tab.previous();
     }
+
+    pub fn switch_echo_subtab(&mut self, keycode: char) {
+        match  keycode {
+            'M' => self.echo_subtab = EchoSubTab::METADATA,
+            'I' => self.echo_subtab = EchoSubTab::INFO,
+            'S' => self.echo_subtab = EchoSubTab::SEARCH,
+            _ => {}
+        }
+    }
 }
 
 pub async fn start(data: (Config, Paths)) -> EchoResult<()> {
@@ -219,8 +242,6 @@ pub async fn start(data: (Config, Paths)) -> EchoResult<()> {
 
     match ui {
         Ok(()) => Ok(()),
-        Err(e) => {
-            Err(EchoError::Io(io::Error::other(e)))
-        }
+        Err(e) => Err(EchoError::Io(io::Error::other(e))),
     }
 }
