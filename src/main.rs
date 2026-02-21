@@ -2,9 +2,9 @@ mod app;
 mod awdio;
 mod config;
 mod ignite;
+mod logger;
 mod result;
 mod ui;
-mod logger;
 
 #[tokio::main]
 async fn main() -> result::EchoResult<()> {

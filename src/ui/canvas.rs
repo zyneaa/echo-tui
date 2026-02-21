@@ -1,7 +1,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{
         Padding, Widget,
@@ -10,6 +10,7 @@ use ratatui::{
     },
 };
 use std::io;
+use toml::to_string;
 
 use directories::ProjectDirs;
 
@@ -17,6 +18,7 @@ use crate::{
     app::{EchoSubTab, SelectedTab},
     awdio::{DurationInfo, song::Song},
     config::Config,
+    ui::components::echo_metadata_table,
 };
 
 use super::EchoCanvas;
@@ -102,15 +104,16 @@ impl Widget for &EchoCanvas {
 
         // Rendering starts here
         let text = vec![
-            self.state.current_song.metadata.title.clone().into(),
-            self.state.current_song.metadata.artist.clone().into(),
+            self.state.active_track.metadata.title.clone().into(),
+            self.state.active_track.metadata.artist.clone().into(),
+            "Local".into(),
         ];
 
         let is_playing_status = format!(
             " PLAYING: {} {} - ●  {}",
             !is_pause,
             self.config.animations["animations"].hpulse[self.state.animations.animation_hpulse.0],
-            self.state.selected_song_pos
+            self.state.echo_selected_metadata_pos
         );
         let title_block = components::bordered_block(
             Line::from(vec![Span::raw(is_playing_status)]),
@@ -123,6 +126,7 @@ impl Widget for &EchoCanvas {
         .title_style(Style::new().fg(self.config.colors["colors"].title));
 
         components::paragraph(text, title_block)
+            .bold()
             .style(Style::default().fg(self.config.colors["colors"].fg))
             .render(song_name_area, buf);
 
@@ -213,8 +217,9 @@ impl Widget for &EchoCanvas {
                 config,
                 &self.state.local_songs,
                 &self.state.selected_song_pos,
-                &self.state.current_song,
-                &self.state.echo_subtab
+                &self.state.active_track,
+                &self.state.echo_subtab,
+                self.state.echo_selected_metadata_pos,
             ),
             SelectedTab::Playlist => render_playlist(body_area, buf),
             SelectedTab::Download => render_playlist(body_area, buf),
@@ -240,7 +245,8 @@ fn render_echo(
     songs: &Vec<Song>,
     selected_song_pos: &usize,
     current_song: &Song,
-    echo_subtab: &EchoSubTab
+    echo_subtab: &EchoSubTab,
+    echo_selected_metadata_pos: usize,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -343,7 +349,7 @@ fn render_echo(
         title_songs,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
-    .title_bottom(" ⎔  ⎔  PATH:")
+    .title_bottom(" ⎔  ⎔  FROM:")
     .title_style(Style::default().fg(config.colors["colors"].title))
     .title_bottom(proj.config_dir().to_string_lossy())
     .title_style(Style::default().fg(config.colors["colors"].title));
@@ -355,7 +361,7 @@ fn render_echo(
         config.colors["colors"].accent,
         config.colors["colors"].title,
         selected_song_pos,
-        echo_subtab
+        echo_subtab,
     )
     .block(local_songs_block)
     .render(left_area, buf);
@@ -370,63 +376,34 @@ fn render_echo(
     let app_info = Line::from(" info ");
     components::bordered_block(app_info, ratatui::style::Color::Red).render(upper_area, buf);
 
-    let metadata_text = vec![
-        Line::from(vec![
-            Span::styled(
-                "Title: ",
-                Style::default().fg(config.colors["colors"].title),
-            ),
-            Span::raw(current_song.metadata.title.clone()),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Artist: ",
-                Style::default().fg(config.colors["colors"].title),
-            ),
-            Span::raw(current_song.metadata.artist.clone()),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Album: ",
-                Style::default().fg(config.colors["colors"].title),
-            ),
-            Span::raw(current_song.metadata.album.clone()),
-        ]),
-        Line::from(vec![
-            Span::styled("Year: ", Style::default().fg(config.colors["colors"].title)),
-            Span::raw(current_song.metadata.year.to_string()),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Genre: ",
-                Style::default().fg(config.colors["colors"].title),
-            ),
-            Span::raw(current_song.metadata.genre.clone()),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Track: ",
-                Style::default().fg(config.colors["colors"].title),
-            ),
-            Span::raw(format!(
-                "{}/{}",
-                current_song.metadata.track_number, current_song.metadata.total_tracks
-            )),
-        ]),
-        Line::from(vec![
-            Span::styled("Disc: ", Style::default().fg(config.colors["colors"].title)),
-            Span::raw(format!(
-                "{}/{}",
-                current_song.metadata.disc_number, current_song.metadata.total_discs
-            )),
-        ]),
+    let selected_song_metadata = &songs[*selected_song_pos].metadata;
+
+    let year_binding = &to_string(&selected_song_metadata.year).unwrap_or_default();
+    let track_number_binding = &to_string(&selected_song_metadata.track_number).unwrap_or_default();
+    let total_tracks_binding = &to_string(&selected_song_metadata.total_tracks).unwrap_or_default();
+    let disc_number_binding = &to_string(&selected_song_metadata.disc_number).unwrap_or_default();
+    let total_discs_binding = &to_string(&selected_song_metadata.total_discs).unwrap_or_default();
+    let metadata = vec![
+        ("TITLE", &selected_song_metadata.title),
+        ("ARTIST", &selected_song_metadata.artist),
+        ("ALBUM", &selected_song_metadata.album),
+        ("YEAR", year_binding),
+        ("GENERE", &selected_song_metadata.genre),
+        ("TRACK NUMBER", track_number_binding),
+        ("TOTAL TRACK", total_tracks_binding),
+        ("DISC NUMBER", disc_number_binding),
+        ("TOTAL DISC", total_discs_binding),
     ];
+    let table = echo_metadata_table(
+        metadata,
+        echo_selected_metadata_pos,
+        echo_subtab,
+        config.colors["colors"].title,
+        config.colors["colors"].fg,
+    );
 
     let metadata_title = Line::from(vec![
-        Span::styled(
-            " M",
-            Style::default().fg(config.colors["colors"].info),
-        ),
+        Span::styled(" M", Style::default().fg(config.colors["colors"].info)),
         Span::styled(
             "ETADATA ⌬ ·· ",
             Style::default().fg(config.colors["colors"].title),
@@ -437,9 +414,7 @@ fn render_echo(
         ratatui::style::Color::from(config.colors["colors"].border),
     );
 
-    components::paragraph(metadata_text, metadata_block)
-        .style(Style::default().fg(config.colors["colors"].fg))
-        .render(lower_area, buf);
+    table.block(metadata_block).render(lower_area, buf);
 }
 
 fn render_playlist(area: Rect, buf: &mut Buffer) {

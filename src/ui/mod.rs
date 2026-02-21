@@ -28,6 +28,7 @@ use crate::{
 pub mod canvas;
 pub mod components;
 pub mod event;
+pub mod actions;
 
 pub struct EchoCanvas {
     state: State,

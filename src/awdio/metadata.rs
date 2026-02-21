@@ -9,9 +9,9 @@ pub struct Metadata {
     pub genre: String,
     pub track_number: u32,
     pub total_tracks: u32,
-    pub album_artist: String,
     pub disc_number: u32,
     pub total_discs: u32,
+    pub album_artist: String,
     pub cover: Option<AlbumArt>,
 }
 
@@ -33,9 +33,9 @@ impl Metadata {
             genre: tag.genre().unwrap_or("Unknown").to_string(),
             track_number: tag.track_number().unwrap_or(0) as u32,
             total_tracks: tag.total_tracks().unwrap_or(0) as u32,
-            album_artist: tag.album_artist().unwrap_or("Unknown").to_string(),
             disc_number: tag.disc_number().unwrap_or(0) as u32,
             total_discs: tag.total_discs().unwrap_or(0) as u32,
+            album_artist: tag.album_artist().unwrap_or("Unknown").to_string(),
             cover: tag.album_cover().map(|pic| AlbumArt {
                 data: pic.data.into(),
                 mime: pic.mime_type,

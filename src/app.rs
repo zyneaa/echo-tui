@@ -12,6 +12,7 @@ use strum::{Display, EnumIter, FromRepr};
 use super::awdio::song::Song;
 use super::result::EchoResult;
 use super::ui;
+use crate::awdio::metadata::Metadata;
 use crate::awdio::{AudioPlayer, song};
 use crate::result::EchoError;
 use crate::{config::Config, ignite::Paths};
@@ -38,6 +39,13 @@ pub struct AnimationState {
     pub animation_spinner: (usize, usize),
     pub animation_hpulse: (usize, usize),
     pub animation_dot: (usize, usize),
+}
+
+#[derive(Debug)]
+pub enum EchoSubTab {
+    SEARCH,
+    INFO,
+    METADATA,
 }
 
 #[derive(Default, Debug, Clone, Copy, Display, FromRepr, EnumIter)]
@@ -104,20 +112,15 @@ impl Default for Report {
 }
 
 #[derive(Debug)]
-pub enum EchoSubTab {
-    SEARCH,
-    INFO,
-    METADATA
-}
-
-#[derive(Debug)]
 pub struct State {
     pub exit: bool,
     pub selected_tab: SelectedTab,
-    pub input: String,
+
+    pub buffer: String,
+
     pub animations: AnimationState,
 
-    pub current_song: Song,
+    pub active_track: Song,
 
     pub uptime: Duration,
     pub uptime_readable: String,
@@ -131,7 +134,10 @@ pub struct State {
     pub report_tx: Sender<Report>,
 
     // Sub tabs
-    pub echo_subtab: EchoSubTab
+    // Echo
+    pub echo_subtab: EchoSubTab,
+    // Echo METADATA
+    pub echo_selected_metadata_pos: usize,
 }
 
 impl State {
@@ -139,16 +145,17 @@ impl State {
         State {
             exit: false,
             selected_tab: SelectedTab::default(),
-            input: "".into(),
+            buffer: "".into(),
             animations: AnimationState::default(),
-            current_song: Song::default(),
+            active_track: Song::default(),
             uptime: Duration::default(),
             uptime_readable: "".into(),
             current_clock: "".into(),
             selected_song_pos: 0,
             local_songs: Vec::new(),
             report_tx: tx,
-            echo_subtab: EchoSubTab::SEARCH
+            echo_subtab: EchoSubTab::SEARCH,
+            echo_selected_metadata_pos: 0,
         }
     }
 
@@ -196,11 +203,11 @@ impl State {
     }
 
     pub fn append_input(&mut self, input: &str) {
-        self.input.push_str(input);
+        self.buffer.push_str(input);
     }
 
     pub fn reset_input(&mut self) {
-        self.input.clear();
+        self.buffer.clear();
     }
 
     pub fn next_tab(&mut self) {
@@ -212,7 +219,7 @@ impl State {
     }
 
     pub fn switch_echo_subtab(&mut self, keycode: char) {
-        match  keycode {
+        match keycode {
             'M' => self.echo_subtab = EchoSubTab::METADATA,
             'I' => self.echo_subtab = EchoSubTab::INFO,
             'S' => self.echo_subtab = EchoSubTab::SEARCH,

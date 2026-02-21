@@ -5,7 +5,8 @@ use crate::app::{EchoSubTab, LogLevel, Report};
 use crate::result::{EchoError, EchoResult};
 use crate::{
     app::SelectedTab,
-    awdio::{AudioPlayer, skip},
+    awdio::skip,
+    ui::AudioData,
 };
 
 impl EchoCanvas {
@@ -22,124 +23,73 @@ impl EchoCanvas {
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
         match key_event.code {
-            KeyCode::Esc => self.state.exit = true,
-            KeyCode::Right => self.next_tab(),
-            KeyCode::Left => self.previous_tab(),
-
-            KeyCode::Char('w') => match self.state.selected_tab {
-                SelectedTab::Echo => match self.state.echo_subtab {
-                    EchoSubTab::SEARCH => self.state.previous_local_song(),
-                    EchoSubTab::INFO => {}
-                    EchoSubTab::METADATA => {}
-                },
-                _ => {}
-            },
-            KeyCode::Char('s') => match self.state.selected_tab {
-                SelectedTab::Echo => match self.state.echo_subtab {
-                    EchoSubTab::SEARCH => self.state.next_local_song(),
-                    EchoSubTab::INFO => {}
-                    EchoSubTab::METADATA => {}
-                },
-                _ => {}
-            },
-
-            KeyCode::Char('M') => match self.state.selected_tab {
-                SelectedTab::Echo => {
-                    self.state.switch_echo_subtab('M');
-                }
-                _ => {}
-            },
-            KeyCode::Char('S') => match self.state.selected_tab {
-                SelectedTab::Echo => {
-                    self.state.switch_echo_subtab('S');
-                }
-                _ => {}
-            },
-
-            KeyCode::Enter => match self.state.selected_tab {
-                SelectedTab::Echo => {
-                    match self.state.local_songs.get(self.state.selected_song_pos) {
-                        Some(v) => {
-                            let reporter = self.state.report_tx.clone();
-                            let audio_player = match AudioPlayer::new(&v.path) {
-                                Ok(player) => player,
-                                Err(e) => {
-                                    reporter
-                                        .send(Report {
-                                            log: Some(EchoError::LockPoisoned(e.to_string())),
-                                            level: LogLevel::ERR,
-                                        })
-                                        .ok();
-                                    AudioPlayer::bad()
-                                }
-                            };
-                            self.state.current_song =
-                                self.state.local_songs[self.state.selected_song_pos].to_owned();
-                            self.audio_player = audio_player;
-
-                            let mut audio_state = Some(self.audio_player.state.clone());
-                            if let Err(_) = self.audio_player.play() {
-                                audio_state = None
-                            }
-                            self.audio_state = audio_state
-                        }
-                        None => {}
-                    }
-                }
-                _ => {}
-            },
-
-            KeyCode::Char('P')
-            | KeyCode::Char('K')
-            | KeyCode::Char('J')
-            | KeyCode::Char('h')
-            | KeyCode::Char('l')
-            | KeyCode::Char('H')
-            | KeyCode::Char('L') => {
-                if let Some(audio_arc_mutex) = &self.audio_state {
-                    match key_event.code {
-                        KeyCode::Char('P') => {
-                            let mut state = audio_arc_mutex
-                                .lock()
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                            state.is_pause = !state.is_pause;
-                        }
-                        KeyCode::Char('K') => {
-                            let mut audio = audio_arc_mutex
-                                .lock()
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                            audio.volume = (audio.volume + 0.1).min(1.0);
-                        }
-                        KeyCode::Char('J') => {
-                            let mut audio = audio_arc_mutex
-                                .lock()
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                            audio.volume = (audio.volume - 0.1).max(0.0);
-                        }
-                        KeyCode::Char('h') => {
-                            skip(audio_arc_mutex.clone(), -1.0)
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                        }
-                        KeyCode::Char('l') => {
-                            skip(audio_arc_mutex.clone(), 1.0)
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                        }
-                        KeyCode::Char('H') => {
-                            skip(audio_arc_mutex.clone(), -10.0)
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                        }
-                        KeyCode::Char('L') => {
-                            skip(audio_arc_mutex.clone(), 10.0)
-                                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
-                        }
-                        _ => unreachable!(),
-                    }
-                }
+            KeyCode::Esc => {
+                self.state.exit = true;
+                return Ok(());
             }
-            _ => {
-                let key = key_event.code.to_string();
-                self.state.append_input(&key);
+            KeyCode::Right => {
+                self.next_tab();
+                return Ok(());
             }
+            KeyCode::Left => {
+                self.previous_tab();
+                return Ok(());
+            }
+            _ => {}
+        }
+
+        match self.state.selected_tab {
+            SelectedTab::Echo => self.handle_echo_key_event(key_event)?,
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_echo_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+        match key_event.code {
+            KeyCode::Char('M') => self.state.switch_echo_subtab('M'),
+            KeyCode::Char('S') => self.state.switch_echo_subtab('S'),
+
+            KeyCode::Char('P') => self.toggle_pause()?,
+            KeyCode::Char('K') => self.adjust_volume(0.1)?,
+            KeyCode::Char('J') => self.adjust_volume(-0.1)?,
+            KeyCode::Char('h') => self.skip_audio(-1.0)?,
+            KeyCode::Char('l') => self.skip_audio(1.0)?,
+
+            _ => match self.state.echo_subtab {
+                EchoSubTab::SEARCH => {},
+                EchoSubTab::METADATA => {},
+                _ => {}
+            },
+        }
+        Ok(())
+    }
+
+    fn skip_audio(&mut self, amount: f64) -> EchoResult<()> {
+        let _ = self.with_audio_state(|state| {
+            let _ = skip(state, amount);
+        });
+
+        Ok(())
+    }
+
+    fn adjust_volume(&mut self, amount: f32) -> EchoResult<()> {
+        self.with_audio_state(|state| state.volume = (state.volume + amount).clamp(0.0, 1.0))
+    }
+
+    fn toggle_pause(&mut self) -> EchoResult<()> {
+        self.with_audio_state(|state| state.is_pause = !state.is_pause)
+    }
+
+    fn with_audio_state<F>(&self, f: F) -> EchoResult<()>
+    where
+        F: FnOnce(&mut AudioData),
+    {
+        if let Some(audio_arc_mutex) = &self.audio_state {
+            let mut state = audio_arc_mutex
+                .lock()
+                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
+            f(&mut state);
         }
 
         Ok(())

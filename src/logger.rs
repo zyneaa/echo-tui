@@ -1,6 +1,6 @@
 use std::fs;
-use tracing_subscriber::fmt;
 use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::fmt;
 
 static mut LOG_GUARD: Option<WorkerGuard> = None;
 

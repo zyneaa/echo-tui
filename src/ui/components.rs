@@ -60,6 +60,46 @@ pub fn tabs(
         .alignment(ratatui::layout::Alignment::Center)
 }
 
+pub fn echo_metadata_table<'a>(
+    metadata: Vec<(&'a str, &'a String)>,
+    echo_selected_metadata_pos: usize,
+    echo_subtab: &EchoSubTab,
+    title: Color,
+    fg: Color
+) -> Table<'a> {
+    let selected_matadata_style;
+    match echo_subtab {
+        EchoSubTab::METADATA => {
+            selected_matadata_style = Style::default().add_modifier(Modifier::REVERSED).fg(title);
+        }
+        _ => selected_matadata_style = Style::default(),
+    }
+
+    let rows = metadata.iter().enumerate().map(|(i, data)| {
+        let is_selected = i == echo_selected_metadata_pos;
+        let row_style = if is_selected {
+            selected_matadata_style
+        } else {
+            Style::default().fg(fg)
+        };
+
+        let (desc, val) = (data.0, data.1);
+
+        Row::new(vec![
+            Cell::from(Text::from(desc)),
+            Cell::from(Text::from(val.clone())),
+        ])
+        .height(1)
+        .style(row_style)
+    });
+
+    Table::new(
+        rows,
+        [Constraint::Percentage(30), Constraint::Percentage(70)],
+    )
+    .row_highlight_style(selected_matadata_style)
+}
+
 pub fn local_songs_table(
     songs: &Vec<Song>,
     fg: Color,
@@ -73,8 +113,8 @@ pub fn local_songs_table(
     match echo_subtab {
         EchoSubTab::SEARCH => {
             selected_row_style = Style::default().add_modifier(Modifier::REVERSED).fg(title);
-        },
-        _ => selected_row_style = Style::default()
+        }
+        _ => selected_row_style = Style::default(),
     }
 
     let rows = songs.iter().enumerate().map(|(i, data)| {

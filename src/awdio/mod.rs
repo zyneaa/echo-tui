@@ -7,6 +7,8 @@ use rustfft::{FftPlanner, num_complex::Complex};
 use symphonia::core::codecs::Decoder;
 use symphonia::core::formats::FormatReader;
 
+use crate::result::EchoResult;
+
 pub mod metadata;
 pub mod song;
 
@@ -343,10 +345,10 @@ fn get_audio_duration(track: &symphonia::core::formats::Track) -> DurationInfo {
 }
 
 pub fn skip(
-    state: Arc<Mutex<AudioData>>,
+    state: &mut AudioData,
     skip_seconds: f64,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut audio_data = state.lock().unwrap();
+) -> EchoResult<()> {
+    let audio_data = state;
     audio_data.is_finished = false;
 
     let sample_rate = audio_data.sample_rate as f64;
