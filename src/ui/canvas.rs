@@ -110,10 +110,11 @@ impl Widget for &EchoCanvas {
         ];
 
         let is_playing_status = format!(
-            " PLAYING: {} {} - ●  {}",
+            " PLAYING: {} {} - ●  {} {}",
             !is_pause,
             self.config.animations["animations"].hpulse[self.state.animations.animation_hpulse.0],
-            self.state.echo_selected_metadata_pos
+            self.state.is_echo_metadata_buffer_being_filled,
+            self.state.buffer
         );
         let title_block = components::bordered_block(
             Line::from(vec![Span::raw(is_playing_status)]),
@@ -219,7 +220,8 @@ impl Widget for &EchoCanvas {
                 &self.state.selected_song_pos,
                 &self.state.active_track,
                 &self.state.echo_subtab,
-                self.state.echo_selected_metadata_pos,
+                self.state.echo_metadata_selected_pos,
+                self.state.is_echo_metadata_buffer_being_filled
             ),
             SelectedTab::Playlist => render_playlist(body_area, buf),
             SelectedTab::Download => render_playlist(body_area, buf),
@@ -247,6 +249,7 @@ fn render_echo(
     current_song: &Song,
     echo_subtab: &EchoSubTab,
     echo_selected_metadata_pos: usize,
+    is_echo_metadata_buffer_being_filled: bool
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)

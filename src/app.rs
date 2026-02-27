@@ -1,4 +1,3 @@
-use core::str;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::{cell::RefCell, io, time::Duration};
@@ -8,11 +7,11 @@ use ratatui::{
     text::Line,
 };
 use strum::{Display, EnumIter, FromRepr};
+use tokio::time::{self, Interval};
 
 use super::awdio::song::Song;
 use super::result::EchoResult;
 use super::ui;
-use crate::awdio::metadata::Metadata;
 use crate::awdio::{AudioPlayer, song};
 use crate::result::EchoError;
 use crate::{config::Config, ignite::Paths};
@@ -126,7 +125,11 @@ pub struct State {
     pub uptime_readable: String,
     pub current_clock: String,
 
-    // Local songs
+    // ticker
+    pub ticker: Interval,
+    pub amimation_ticker: Interval,
+    pub timestamp_ticker: Interval,
+
     pub selected_song_pos: usize,
     pub local_songs: Vec<Song>,
 
@@ -137,7 +140,8 @@ pub struct State {
     // Echo
     pub echo_subtab: EchoSubTab,
     // Echo METADATA
-    pub echo_selected_metadata_pos: usize,
+    pub echo_metadata_selected_pos: usize,
+    pub is_echo_metadata_buffer_being_filled: bool,
 }
 
 impl State {
@@ -151,11 +155,15 @@ impl State {
             uptime: Duration::default(),
             uptime_readable: "".into(),
             current_clock: "".into(),
+            ticker: time::interval(Duration::from_millis(100)),
+            amimation_ticker: time::interval(Duration::from_millis(200)),
+            timestamp_ticker: time::interval(Duration::from_millis(1000)),
             selected_song_pos: 0,
             local_songs: Vec::new(),
             report_tx: tx,
             echo_subtab: EchoSubTab::SEARCH,
-            echo_selected_metadata_pos: 0,
+            echo_metadata_selected_pos: 0,
+            is_echo_metadata_buffer_being_filled: false,
         }
     }
 

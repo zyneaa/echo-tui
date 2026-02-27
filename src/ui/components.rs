@@ -65,7 +65,7 @@ pub fn echo_metadata_table<'a>(
     echo_selected_metadata_pos: usize,
     echo_subtab: &EchoSubTab,
     title: Color,
-    fg: Color
+    fg: Color,
 ) -> Table<'a> {
     let selected_matadata_style;
     match echo_subtab {
