@@ -72,7 +72,7 @@ pub fn echo_metadata_table<'a>(
         EchoSubTab::METADATA => {
             selected_matadata_style = Style::default().add_modifier(Modifier::REVERSED).fg(title);
         }
-        _ => selected_matadata_style = Style::default(),
+        _ => selected_matadata_style = Style::default().fg(fg),
     }
 
     let rows = metadata.iter().enumerate().map(|(i, data)| {

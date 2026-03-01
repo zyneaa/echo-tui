@@ -221,7 +221,8 @@ impl Widget for &EchoCanvas {
                 &self.state.active_track,
                 &self.state.echo_subtab,
                 self.state.echo_metadata_selected_pos,
-                self.state.is_echo_metadata_buffer_being_filled
+                self.state.is_echo_metadata_buffer_being_filled,
+                &self.state.buffer,
             ),
             SelectedTab::Playlist => render_playlist(body_area, buf),
             SelectedTab::Download => render_playlist(body_area, buf),
@@ -249,7 +250,8 @@ fn render_echo(
     current_song: &Song,
     echo_subtab: &EchoSubTab,
     echo_selected_metadata_pos: usize,
-    is_echo_metadata_buffer_being_filled: bool
+    is_echo_metadata_buffer_being_filled: bool,
+    buffer: &String,
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -415,7 +417,11 @@ fn render_echo(
     let metadata_block = components::bordered_block(
         metadata_title,
         ratatui::style::Color::from(config.colors["colors"].border),
-    );
+    )
+    .title_bottom(Line::from(vec![Span::styled(
+        " BUFF: ",
+        Style::default().fg(config.colors["colors"].title),
+    ), Span::styled(format!("{} ", buffer), Style::default().fg(config.colors["colors"].title))]));
 
     table.block(metadata_block).render(lower_area, buf);
 }

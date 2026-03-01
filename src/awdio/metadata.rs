@@ -44,7 +44,7 @@ impl Metadata {
     }
 
     pub fn update_file(&self, path: &str) -> Result<(), audiotags::Error> {
-        let mut tag = Tag::new().read_from_path(path)?;
+        let mut tag = Tag::default().read_from_path(path)?;
 
         tag.set_title(&self.title);
         tag.set_artist(&self.artist);

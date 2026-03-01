@@ -8,6 +8,9 @@ pub enum EchoError {
     #[error("Audio: {0}")]
     Audio(String),
 
+    #[error("Audio: {0}")]
+    AudioTagError(#[from] audiotags::Error),
+
     #[error("Metadata: {0}")]
     InvalidMetadata(String),
 

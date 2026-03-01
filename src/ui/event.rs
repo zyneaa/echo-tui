@@ -43,6 +43,10 @@ impl EchoCanvas {
     }
 
     fn handle_echo_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+        if self.state.is_echo_metadata_buffer_being_filled {
+            return self.handle_echo_metadata_key_event(key_event);
+        }
+
         match key_event.code {
             KeyCode::Char('M') => self.state.switch_echo_subtab('M'),
             KeyCode::Char('S') => self.state.switch_echo_subtab('S'),
@@ -102,13 +106,83 @@ impl EchoCanvas {
         if self.state.is_echo_metadata_buffer_being_filled {
             match key_event.code {
                 KeyCode::Enter => {
+                    let selected_song = &mut self.state.local_songs[self.state.selected_song_pos];
+                    match self.state.echo_metadata_selected_pos {
+                        0 => {
+                            selected_song.metadata.title = self.state.buffer.clone();
+                        }
+                        1 => {
+                            selected_song.metadata.artist = self.state.buffer.clone();
+                        }
+                        2 => {
+                            selected_song.metadata.album = self.state.buffer.clone();
+                        }
+                        3 => {
+                            selected_song.metadata.year = self
+                                .state
+                                .buffer
+                                .parse::<u32>()
+                                .unwrap_or(selected_song.metadata.year);
+                        }
+                        4 => {
+                            selected_song.metadata.genre = self.state.buffer.clone();
+                        }
+                        5 => {
+                            selected_song.metadata.track_number = self
+                                .state
+                                .buffer
+                                .parse::<u32>()
+                                .unwrap_or(selected_song.metadata.track_number);
+                        }
+                        6 => {
+                            selected_song.metadata.total_tracks = self
+                                .state
+                                .buffer
+                                .parse::<u32>()
+                                .unwrap_or(selected_song.metadata.total_tracks);
+                        }
+                        7 => {
+                            selected_song.metadata.disc_number = self
+                                .state
+                                .buffer
+                                .parse::<u32>()
+                                .unwrap_or(selected_song.metadata.disc_number);
+                        }
+                        8 => {
+                            selected_song.metadata.total_discs = self
+                                .state
+                                .buffer
+                                .parse::<u32>()
+                                .unwrap_or(selected_song.metadata.total_discs);
+                        }
+                        _ => {}
+                    }
+
+                    let metadata_to_save = selected_song.metadata.clone();
+                    let path_to_save = selected_song.path.clone();
+                    let reporter = self.state.report_tx.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = metadata_to_save.update_file(&path_to_save) {
+                            let _ = reporter.send(Report {
+                                log: Some(EchoError::AudioTagError(e)),
+                                level: LogLevel::ERR,
+                            });
+                        }
+                    });
+
                     self.state.is_echo_metadata_buffer_being_filled = false;
+                    self.state.buffer = String::new();
                     return Ok(());
                 }
-                _ => {
-                    self.state.buffer.push_str(&key_event.code.to_string());
+                KeyCode::Char(c) => {
+                    self.state.buffer.push(c);
                     return Ok(());
                 }
+                KeyCode::Backspace => {
+                    self.state.buffer.pop();
+                    return Ok(());
+                }
+                _ => return Ok(()),
             }
         }
 
@@ -118,30 +192,25 @@ impl EchoCanvas {
                     self.state.echo_metadata_selected_pos.saturating_sub(1)
             }
             KeyCode::Char('s') => {
-                self.state.echo_metadata_selected_pos = self
-                    .state
-                    .echo_metadata_selected_pos
-                    .saturating_add(1)
-                    .min(8)
+                self.state.echo_metadata_selected_pos =
+                    (self.state.echo_metadata_selected_pos + 1).min(8)
             }
             KeyCode::Enter => {
-                if !self.state.is_echo_metadata_buffer_being_filled {
-                    self.state.is_echo_metadata_buffer_being_filled =
-                        !self.state.is_echo_metadata_buffer_being_filled;
-                }
-
+                self.state.is_echo_metadata_buffer_being_filled = true;
                 let selected_song = &self.state.local_songs[self.state.selected_song_pos];
+                let metadata = &selected_song.metadata;
+
                 match self.state.echo_metadata_selected_pos {
-                    1 => {}
-                    2 => {}
-                    3 => {}
-                    4 => {}
-                    5 => {}
-                    6 => {}
-                    7 => {}
-                    8 => {}
-                    9 => {}
-                    _ => {}
+                    0 => self.state.buffer = metadata.title.clone(),
+                    1 => self.state.buffer = metadata.artist.clone(),
+                    2 => self.state.buffer = metadata.album.clone(),
+                    3 => self.state.buffer = metadata.year.to_string(),
+                    4 => self.state.buffer = metadata.genre.clone(),
+                    5 => self.state.buffer = metadata.track_number.to_string(),
+                    6 => self.state.buffer = metadata.total_tracks.to_string(),
+                    7 => self.state.buffer = metadata.disc_number.to_string(),
+                    8 => self.state.buffer = metadata.total_discs.to_string(),
+                    _ => self.state.buffer = String::new(),
                 }
             }
             _ => {}
