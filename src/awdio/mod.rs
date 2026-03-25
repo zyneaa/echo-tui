@@ -40,6 +40,7 @@ pub struct AudioData {
     pub track_id: u32,
 
     pub fft_state: Vec<f32>,
+    pub enable_fft_compute: bool,
 }
 
 pub struct AudioPlayer {
@@ -112,6 +113,7 @@ impl AudioPlayer {
             track_id,
 
             fft_state: vec![],
+            enable_fft_compute: true,
         };
 
         Ok(Self {
@@ -183,8 +185,7 @@ impl AudioPlayer {
             loop {
                 let maybe_chunk = {
                     let data = fft_state.lock().unwrap();
-                    if data.samples.len() >= 4056 {
-                        // Grab a small window without draining the whole buffer
+                    if data.enable_fft_compute && data.samples.len() >= 4056 {
                         let chunk: Vec<f32> = data.samples.iter().take(2056).cloned().collect();
                         Some(chunk)
                     } else {
@@ -344,10 +345,7 @@ fn get_audio_duration(track: &symphonia::core::formats::Track) -> DurationInfo {
     }
 }
 
-pub fn skip(
-    state: &mut AudioData,
-    skip_seconds: f64,
-) -> EchoResult<()> {
+pub fn skip(state: &mut AudioData, skip_seconds: f64) -> EchoResult<()> {
     let audio_data = state;
     audio_data.is_finished = false;
 

@@ -13,7 +13,7 @@ use super::awdio::song::Song;
 use super::result::EchoResult;
 use super::ui;
 use crate::awdio::{AudioPlayer, song};
-use crate::result::EchoError;
+use crate::result::EchoReport;
 use crate::{config::Config, ignite::Paths};
 
 #[derive(Debug)]
@@ -97,7 +97,8 @@ pub enum LogLevel {
 
 #[derive(Debug)]
 pub struct Report {
-    pub log: Option<EchoError>,
+    pub log: Option<String>,
+    pub report: Option<EchoReport>,
     pub level: LogLevel,
 }
 
@@ -105,6 +106,7 @@ impl Default for Report {
     fn default() -> Self {
         Report {
             log: None,
+            report: None,
             level: LogLevel::INFO,
         }
     }
@@ -118,6 +120,7 @@ pub struct State {
     pub buffer: String,
 
     pub animations: AnimationState,
+    pub is_fft_enable: bool,
 
     pub active_track: Song,
 
@@ -135,6 +138,7 @@ pub struct State {
 
     // Logging
     pub report_tx: Sender<Report>,
+    pub current_report: Option<Report>,
 
     // Sub tabs
     // Echo
@@ -151,6 +155,7 @@ impl State {
             selected_tab: SelectedTab::default(),
             buffer: "".into(),
             animations: AnimationState::default(),
+            is_fft_enable: true,
             active_track: Song::default(),
             uptime: Duration::default(),
             uptime_readable: "".into(),
@@ -161,6 +166,7 @@ impl State {
             selected_song_pos: 0,
             local_songs: Vec::new(),
             report_tx: tx,
+            current_report: None,
             echo_subtab: EchoSubTab::SEARCH,
             echo_metadata_selected_pos: 0,
             is_echo_metadata_buffer_being_filled: false,
@@ -257,6 +263,6 @@ pub async fn start(data: (Config, Paths)) -> EchoResult<()> {
 
     match ui {
         Ok(()) => Ok(()),
-        Err(e) => Err(EchoError::Io(io::Error::other(e))),
+        Err(e) => Err(EchoReport::Io(io::Error::other(e))),
     }
 }

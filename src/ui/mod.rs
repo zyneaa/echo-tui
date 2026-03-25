@@ -25,10 +25,10 @@ use crate::{
     awdio::AudioPlayer,
 };
 
+pub mod actions;
 pub mod canvas;
 pub mod components;
 pub mod event;
-pub mod actions;
 
 pub struct EchoCanvas {
     state: State,
@@ -81,6 +81,10 @@ impl EchoCanvas {
         });
 
         while !self.state.exit {
+            while let Ok(report) = self.report_rx.try_recv() {
+                self.state.current_report = Some(report);
+            }
+
             tokio::select! {
                 _ = ticker.tick() => {
                     // refresh ui
@@ -102,13 +106,15 @@ impl EchoCanvas {
                         Err(e) => {
                             let reporter = self.state.report_tx.clone();
                             reporter.send(Report {
-                                log: Some(e),
+                                log: Some(e.to_string()),
+                                report: Some(e),
                                 level: LogLevel::ERR
                             }).ok();
                         }
                     }
                 }
             }
+
             let _ = terminal.draw(|frame| self.draw(frame));
         }
 

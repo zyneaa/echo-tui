@@ -15,7 +15,7 @@ use toml::to_string;
 use directories::ProjectDirs;
 
 use crate::{
-    app::{EchoSubTab, SelectedTab},
+    app::{EchoSubTab, LogLevel, SelectedTab},
     awdio::{DurationInfo, song::Song},
     config::Config,
     ui::components::echo_metadata_table,
@@ -62,6 +62,7 @@ impl Widget for &EchoCanvas {
             total_samples_played,
             min_buffer_threshold,
             fft,
+            enable_fft_compute,
         ) = {
             match &self.audio_state {
                 Some(v) => {
@@ -78,6 +79,7 @@ impl Widget for &EchoCanvas {
                         audio.total_samples_played,
                         audio.min_buffer_threshold,
                         audio.fft_state.clone(),
+                        audio.enable_fft_compute.clone(),
                     )
                 }
                 None => (
@@ -92,6 +94,7 @@ impl Widget for &EchoCanvas {
                     0,
                     0,
                     Vec::new(),
+                    true,
                 ),
             }
         };
@@ -190,14 +193,20 @@ impl Widget for &EchoCanvas {
         )
         .render(tab_area[0], buf);
 
-        let report = self.report_rx.try_recv().unwrap_or_default();
-        let report_log = match report.log {
-            Some(e) => e.to_string(),
-            None => "".into(),
-        };
-        components::unbordered_block(Line::from(format!("{}", report_log)))
-            .title_style(Style::default().fg(self.config.colors["colors"].error))
-            .render(tab_area[1], buf);
+        let report = self.state.current_report.as_ref();
+        if let Some(report) = report {
+            let level = &report.level;
+            if let Some(val) = &report.log {
+                match level {
+                    LogLevel::INFO => {
+                        components::unbordered_block(Line::from(format!(" ⚬ {}", val)))
+                            .title_style(Style::default().fg(self.config.colors["colors"].success))
+                            .render(tab_area[1], buf)
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         let config = &self.config;
 
@@ -223,6 +232,7 @@ impl Widget for &EchoCanvas {
                 self.state.echo_metadata_selected_pos,
                 self.state.is_echo_metadata_buffer_being_filled,
                 &self.state.buffer,
+                enable_fft_compute,
             ),
             SelectedTab::Playlist => render_playlist(body_area, buf),
             SelectedTab::Download => render_playlist(body_area, buf),
@@ -252,91 +262,106 @@ fn render_echo(
     echo_selected_metadata_pos: usize,
     is_echo_metadata_buffer_being_filled: bool,
     buffer: &String,
+    enable_fft_compute: bool,
 ) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(area);
+    let chunks = if enable_fft_compute {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(area)
+    } else {
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(0), Constraint::Percentage(100)])
+            .split(area)
+    };
+
     let ttf_area = chunks[0];
     let body_area = chunks[1];
 
-    let title_ttf = Line::from(" ▪︎ ");
-    let ttf_block = components::bordered_block(title_ttf, low_color)
-        .border_style(Style::new().fg(high_color))
-        .title_style(Style::new().fg(mid_color));
-    let fft_data: Vec<f64> = fft_state.iter().map(|value| *value as f64).collect();
+    if enable_fft_compute {
+        let title_ttf = Line::from(" ▪︎ ");
+        let ttf_block = components::bordered_block(title_ttf, low_color)
+            .border_style(Style::new().fg(high_color))
+            .title_style(Style::new().fg(mid_color));
+        let fft_data: Vec<f64> = fft_state.iter().map(|value| *value as f64).collect();
 
-    let inner_area = ttf_block.inner(ttf_area);
-    let width = inner_area.width as f64;
-    let height = (inner_area.height as f64) + 50.0;
+        let inner_area = ttf_block.inner(ttf_area);
+        let width = inner_area.width as f64;
+        let height = (inner_area.height as f64) + 50.0;
 
-    let middle = height / 2.0;
+        let middle = height / 2.0;
 
-    let gradient_start = hex_to_rgb(&config.colors["colors"].fg.to_string()).unwrap_or((0, 0, 0));
-    let gradient_mid = hex_to_rgb(&config.colors["colors"].title.to_string()).unwrap_or((0, 0, 0));
-    let gradient_stop =
-        hex_to_rgb(&config.colors["colors"].border.to_string()).unwrap_or((255, 255, 255));
+        let gradient_start =
+            hex_to_rgb(&config.colors["colors"].fg.to_string()).unwrap_or((0, 0, 0));
+        let gradient_mid =
+            hex_to_rgb(&config.colors["colors"].title.to_string()).unwrap_or((0, 0, 0));
+        let gradient_stop =
+            hex_to_rgb(&config.colors["colors"].border.to_string()).unwrap_or((255, 255, 255));
 
-    let gradient = gradient_steps(gradient_start, gradient_mid, gradient_stop, 32);
+        let gradient = gradient_steps(gradient_start, gradient_mid, gradient_stop, 32);
 
-    let mut all_points = vec![];
+        let mut all_points = vec![];
 
-    for (i_idx, i) in fft_data.iter().enumerate() {
-        for j in 0..(*i as usize) {
-            let upper = j as f64 + middle;
-            let height_percent = upper / height;
+        for (i_idx, i) in fft_data.iter().enumerate() {
+            for j in 0..(*i as usize) {
+                let upper = j as f64 + middle;
+                let height_percent = upper / height;
 
-            let level_idx = (height_percent.clamp(0.0, 1.0) * (gradient.len() - 1) as f64) as usize;
+                let level_idx =
+                    (height_percent.clamp(0.0, 1.0) * (gradient.len() - 1) as f64) as usize;
 
-            all_points.push(((i_idx as f64), upper, gradient[level_idx]));
-            all_points.push((
-                (i_idx as f64),
-                height - middle - j as f64,
-                gradient[level_idx],
-            ));
+                all_points.push(((i_idx as f64), upper, gradient[level_idx]));
+                all_points.push((
+                    (i_idx as f64),
+                    height - middle - j as f64,
+                    gradient[level_idx],
+                ));
+            }
         }
+
+        Canvas::default()
+            .block(
+                ttf_block
+                    .title_bottom(Line::from(format!(
+                        " ○ ○ SAMPLE_POS: {} / {} • ",
+                        total_samples_played, max_samples
+                    )))
+                    .title_bottom(
+                        Line::from(format!(
+                            " • • MIN_BUF_THRESHOLD: {} ⋯ ",
+                            min_buffer_threshold
+                        ))
+                        .right_aligned(),
+                    )
+                    .title(Title::from(format!(
+                        " ■ SAMPLE_BUF: {} // SAMPLE_RATE: {} // BUS: {}X ",
+                        sample_buffer_size, sample_rate, channels
+                    ))),
+            )
+            .x_bounds([0.0, width])
+            .y_bounds([-50.0, height + 50.0])
+            .paint(|ctx| {
+                ctx.layer();
+
+                for (x, y, color) in all_points.iter() {
+                    let (r, g, b) = color.clone();
+                    let main_color = Color::Rgb(r, g, b);
+                    let fade_color = Color::Rgb(r / 2, g / 2, b / 2);
+
+                    ctx.draw(&Points {
+                        coords: &[(*x, *y)],
+                        color: main_color,
+                    });
+                    ctx.draw(&Points {
+                        coords: &[(x + 0.5, y + 0.5)],
+                        color: fade_color,
+                    });
+                }
+            })
+            .render(ttf_area, buf);
     }
 
-    Canvas::default()
-        .block(
-            ttf_block
-                .title_bottom(Line::from(format!(
-                    " ○ ○ SAMPLE_POS: {} / {} • ",
-                    total_samples_played, max_samples
-                )))
-                .title_bottom(
-                    Line::from(format!(
-                        " • • MIN_BUF_THRESHOLD: {} ⋯ ",
-                        min_buffer_threshold
-                    ))
-                    .right_aligned(),
-                )
-                .title(Title::from(format!(
-                    " ■ SAMPLE_BUF: {} // SAMPLE_RATE: {} // BUS: {}X ",
-                    sample_buffer_size, sample_rate, channels
-                ))),
-        )
-        .x_bounds([0.0, width])
-        .y_bounds([-50.0, height + 50.0])
-        .paint(|ctx| {
-            ctx.layer();
-
-            for (x, y, color) in all_points.iter() {
-                let (r, g, b) = color.clone();
-                let main_color = Color::Rgb(r, g, b);
-                let fade_color = Color::Rgb(r / 2, g / 2, b / 2);
-
-                ctx.draw(&Points {
-                    coords: &[(*x, *y)],
-                    color: main_color,
-                });
-                ctx.draw(&Points {
-                    coords: &[(x + 0.5, y + 0.5)],
-                    color: fade_color,
-                });
-            }
-        })
-        .render(ttf_area, buf);
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
@@ -418,10 +443,16 @@ fn render_echo(
         metadata_title,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
-    .title_bottom(Line::from(vec![Span::styled(
-        " BUFF: ",
-        Style::default().fg(config.colors["colors"].title),
-    ), Span::styled(format!("{} ", buffer), Style::default().fg(config.colors["colors"].title))]));
+    .title_bottom(Line::from(vec![
+        Span::styled(
+            " BUFF: ",
+            Style::default().fg(config.colors["colors"].title),
+        ),
+        Span::styled(
+            format!("{} ", buffer),
+            Style::default().fg(config.colors["colors"].title),
+        ),
+    ]));
 
     table.block(metadata_block).render(lower_area, buf);
 }

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum EchoError {
+pub enum EchoReport {
     #[error("IO: {0}")]
     Io(#[from] std::io::Error),
 
@@ -27,4 +27,4 @@ pub enum EchoError {
     ResourceBusy,
 }
 
-pub type EchoResult<T> = Result<T, EchoError>;
+pub type EchoResult<T> = Result<T, EchoReport>;

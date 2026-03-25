@@ -1,4 +1,4 @@
-pub  enum Actions {
+pub enum Actions {
     TogglePause,
     VolumeUp,
     NavigateDown,

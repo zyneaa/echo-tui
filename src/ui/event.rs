@@ -3,7 +3,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use super::EchoCanvas;
 use crate::app::{EchoSubTab, LogLevel, Report};
 use crate::awdio::AudioPlayer;
-use crate::result::{EchoError, EchoResult};
+use crate::result::{EchoReport, EchoResult};
 use crate::{app::SelectedTab, awdio::skip, ui::AudioData};
 
 impl EchoCanvas {
@@ -48,6 +48,10 @@ impl EchoCanvas {
         }
 
         match key_event.code {
+            KeyCode::Char('f') => {
+                let mut ok = self.audio_player.state.lock().unwrap();
+                ok.enable_fft_compute = !ok.enable_fft_compute;
+            }
             KeyCode::Char('M') => self.state.switch_echo_subtab('M'),
             KeyCode::Char('S') => self.state.switch_echo_subtab('S'),
 
@@ -78,7 +82,8 @@ impl EchoCanvas {
                         Err(e) => {
                             reporter
                                 .send(Report {
-                                    log: Some(EchoError::LockPoisoned(e.to_string())),
+                                    log: Some(e.to_string()),
+                                    report: Some(EchoReport::LockPoisoned(e.to_string())),
                                     level: LogLevel::ERR,
                                 })
                                 .ok();
@@ -164,14 +169,22 @@ impl EchoCanvas {
                     tokio::spawn(async move {
                         if let Err(e) = metadata_to_save.update_file(&path_to_save) {
                             let _ = reporter.send(Report {
-                                log: Some(EchoError::AudioTagError(e)),
+                                log: Some(e.to_string()),
+                                report: Some(EchoReport::AudioTagError(e)),
                                 level: LogLevel::ERR,
+                            });
+                        } else {
+                            let _ = reporter.send(Report {
+                                log: Some("METADATA WRITTEN SUCCESS".into()),
+                                report: None,
+                                level: LogLevel::INFO,
                             });
                         }
                     });
 
                     self.state.is_echo_metadata_buffer_being_filled = false;
                     self.state.buffer = String::new();
+
                     return Ok(());
                 }
                 KeyCode::Char(c) => {
@@ -242,7 +255,7 @@ impl EchoCanvas {
         if let Some(audio_arc_mutex) = &self.audio_state {
             let mut state = audio_arc_mutex
                 .lock()
-                .map_err(|e| EchoError::LockPoisoned(e.to_string()))?;
+                .map_err(|e| EchoReport::LockPoisoned(e.to_string()))?;
             f(&mut state);
         }
 
