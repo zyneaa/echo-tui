@@ -55,7 +55,7 @@ pub struct Animations {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Config {
+pub struct UiConfig {
     #[serde(flatten)]
     pub colors: HashMap<String, Colors>,
 

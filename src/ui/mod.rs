@@ -1,4 +1,5 @@
 use chrono::Local;
+use sqlx::SqlitePool;
 use std::{
     io::stdout,
     sync::{Arc, Mutex, mpsc::Receiver},
@@ -17,7 +18,7 @@ use tokio::{
     time::{self, Duration, Interval},
 };
 
-use crate::config::Config;
+use crate::config::UiConfig;
 use crate::result::EchoResult;
 use crate::{app::State, awdio::AudioData};
 use crate::{
@@ -32,7 +33,8 @@ pub mod event;
 
 pub struct EchoCanvas {
     state: State,
-    config: Config,
+    ui_config: UiConfig,
+    db_connection_pool: SqlitePool,
     audio_player: AudioPlayer,
     audio_state: Option<Arc<Mutex<AudioData>>>,
     report_rx: Receiver<Report>,
@@ -41,14 +43,16 @@ pub struct EchoCanvas {
 impl EchoCanvas {
     pub fn init(
         state: State,
-        config: Config,
+        config: UiConfig,
+        db_connection: SqlitePool,
         audio_state: Option<Arc<Mutex<AudioData>>>,
         audio_player: AudioPlayer,
         report_rx: Receiver<Report>,
     ) -> Self {
         EchoCanvas {
             state,
-            config,
+            ui_config: config,
+            db_connection_pool: db_connection,
             audio_player,
             audio_state,
             report_rx,

@@ -5,8 +5,9 @@ use std::{
 };
 
 use directories::ProjectDirs;
+use sqlx::SqlitePool;
 
-use crate::config::Config;
+use crate::{config::UiConfig, db, result::EchoResult};
 
 use super::config;
 
@@ -14,7 +15,6 @@ pub struct Paths {
     pub config: PathBuf,
     pub data: PathBuf,
     pub songs: PathBuf,
-    pub playlists: PathBuf,
 }
 
 impl Paths {
@@ -42,18 +42,16 @@ impl Paths {
         fs::create_dir_all(data.join("songs"))?;
         fs::create_dir_all(data.join("playlists"))?;
         let songs = data.join("songs");
-        let playlists = data.join("playlists");
 
         Ok(Self {
             config: config.to_path_buf(),
             data: data.to_path_buf(),
             songs,
-            playlists,
         })
     }
 }
 
-pub fn engine() -> Result<(Config, Paths), Box<dyn std::error::Error>> {
+pub async fn engine() -> EchoResult<(UiConfig, SqlitePool, Paths)> {
     let paths = Paths::init()?;
 
     let config_file = paths.config.join("config/echo.toml");
@@ -61,10 +59,11 @@ pub fn engine() -> Result<(Config, Paths), Box<dyn std::error::Error>> {
     let mut config: String = String::new();
     File::open(config_file)?.read_to_string(&mut config)?;
 
-    let config_vals: config::Config = toml::from_str(&config)?;
+    let config_vals: config::UiConfig = toml::from_str(&config)?;
+    let db_connection = db::init_db(paths.data.join("data/music.db").to_str().unwrap()).await?;
 
     println!("{:?}", config_vals.colors);
 
-    let ok = (config_vals, paths);
+    let ok = (config_vals, db_connection, paths);
     Ok(ok)
 }

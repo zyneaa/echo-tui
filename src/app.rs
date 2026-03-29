@@ -6,6 +6,7 @@ use ratatui::{
     style::{Style, palette::tailwind},
     text::Line,
 };
+use sqlx::SqlitePool;
 use strum::{Display, EnumIter, FromRepr};
 use tokio::time::{self, Interval};
 
@@ -14,7 +15,7 @@ use super::result::EchoResult;
 use super::ui;
 use crate::awdio::{AudioPlayer, song};
 use crate::result::EchoReport;
-use crate::{config::Config, ignite::Paths};
+use crate::{config::UiConfig, ignite::Paths};
 
 #[derive(Debug)]
 pub struct AnimationTimeStamp {
@@ -242,7 +243,7 @@ impl State {
     }
 }
 
-pub async fn start(data: (Config, Paths)) -> EchoResult<()> {
+pub async fn start(data: (UiConfig, SqlitePool, Paths)) -> EchoResult<()> {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut state = State::new(tx);
 
@@ -254,10 +255,10 @@ pub async fn start(data: (Config, Paths)) -> EchoResult<()> {
         data.0.animations["animations"].timestamp_bar.clone(),
     );
 
-    let local_songs = song::get_local_songs(data.1.songs.to_str().unwrap());
+    let local_songs = song::get_local_songs(data.2.songs.to_str().unwrap());
     state.local_songs = local_songs;
 
-    let mut canvas = ui::EchoCanvas::init(state, data.0, None, AudioPlayer::bad(), rx);
+    let mut canvas = ui::EchoCanvas::init(state, data.0, data.1, None, AudioPlayer::bad(), rx);
 
     let ui = canvas.paint().await;
 

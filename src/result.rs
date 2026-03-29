@@ -25,6 +25,12 @@ pub enum EchoReport {
 
     #[error("Resource is busy, try again later")]
     ResourceBusy,
+
+    #[error("Database error: {0}")]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error("Config file error: {0}")]
+    TOML(#[from] toml::de::Error)
 }
 
 pub type EchoResult<T> = Result<T, EchoReport>;

@@ -1,6 +1,7 @@
 mod app;
 mod awdio;
 mod config;
+mod db;
 mod ignite;
 mod logger;
 mod result;
@@ -10,7 +11,7 @@ mod ui;
 async fn main() -> result::EchoResult<()> {
     logger::init_logger();
 
-    match ignite::engine() {
+    match ignite::engine().await {
         Ok(val) => {
             if let Err(e) = app::start(val).await {
                 eprintln!("{}", e);

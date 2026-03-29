@@ -17,7 +17,7 @@ use directories::ProjectDirs;
 use crate::{
     app::{EchoSubTab, LogLevel, SelectedTab},
     awdio::{DurationInfo, song::Song},
-    config::Config,
+    config::UiConfig,
     ui::components::echo_metadata_table,
 };
 
@@ -115,28 +115,28 @@ impl Widget for &EchoCanvas {
         let is_playing_status = format!(
             " PLAYING: {} {} - ●  {} {}",
             !is_pause,
-            self.config.animations["animations"].hpulse[self.state.animations.animation_hpulse.0],
+            self.ui_config.animations["animations"].hpulse[self.state.animations.animation_hpulse.0],
             self.state.is_echo_metadata_buffer_being_filled,
             self.state.buffer
         );
         let title_block = components::bordered_block(
             Line::from(vec![Span::raw(is_playing_status)]),
-            self.config.colors["colors"].border,
+            self.ui_config.colors["colors"].border,
         )
         .title(Line::from(" | ").right_aligned())
         .padding(Padding::horizontal(1))
         .title_bottom(Line::from(format!(" SIZE: {} ", file_size)))
         .title_bottom(Line::from(format!(" CLK: {} ", duration.readable)).right_aligned())
-        .title_style(Style::new().fg(self.config.colors["colors"].title));
+        .title_style(Style::new().fg(self.ui_config.colors["colors"].title));
 
         components::paragraph(text, title_block)
             .bold()
-            .style(Style::default().fg(self.config.colors["colors"].fg))
+            .style(Style::default().fg(self.ui_config.colors["colors"].fg))
             .render(song_name_area, buf);
 
         let timestamp_block =
-            components::bordered_block(Line::default(), self.config.colors["colors"].border)
-                .title_style(Style::new().fg(self.config.colors["colors"].title))
+            components::bordered_block(Line::default(), self.ui_config.colors["colors"].border)
+                .title_style(Style::new().fg(self.ui_config.colors["colors"].title))
                 .title(
                     Line::from(format!(" UPTIME: {} ", self.state.uptime_readable)).right_aligned(),
                 )
@@ -149,10 +149,10 @@ impl Widget for &EchoCanvas {
         let mut anim = self.state.animations.animation_timestamp.borrow_mut();
         for i in 0..=anim.vals.len() - 1 {
             if i == position {
-                anim.vals[position] = self.config.animations["animations"].timestamp.clone();
+                anim.vals[position] = self.ui_config.animations["animations"].timestamp.clone();
                 continue;
             }
-            anim.vals[i] = self.config.animations["animations"].timestamp_bar.clone();
+            anim.vals[i] = self.ui_config.animations["animations"].timestamp_bar.clone();
         }
         drop(anim);
 
@@ -172,24 +172,24 @@ impl Widget for &EchoCanvas {
             vec![Line::from(timestamp_bar), Line::from(timestamp)],
             timestamp_block,
         )
-        .style(Style::default().fg(self.config.colors["colors"].fg))
+        .style(Style::default().fg(self.ui_config.colors["colors"].fg))
         .centered()
         .render(header_area[1], buf);
 
         let tab_block =
-            components::bordered_block(Line::default(), self.config.colors["colors"].border)
+            components::bordered_block(Line::default(), self.ui_config.colors["colors"].border)
                 .title(" ● ")
-                .title_style(Style::new().fg(self.config.colors["colors"].title));
+                .title_style(Style::new().fg(self.ui_config.colors["colors"].title));
 
-        let spinner = self.config.animations["animations"].spinner.clone();
+        let spinner = self.ui_config.animations["animations"].spinner.clone();
 
         components::tabs(
             self.state.selected_tab,
             tab_block,
             self.state.animations.animation_spinner.0,
             spinner,
-            self.config.colors["colors"].fg,
-            self.config.colors["colors"].accent,
+            self.ui_config.colors["colors"].fg,
+            self.ui_config.colors["colors"].accent,
         )
         .render(tab_area[0], buf);
 
@@ -200,7 +200,7 @@ impl Widget for &EchoCanvas {
                 match level {
                     LogLevel::INFO => {
                         components::unbordered_block(Line::from(format!(" ⚬ {}", val)))
-                            .title_style(Style::default().fg(self.config.colors["colors"].success))
+                            .title_style(Style::default().fg(self.ui_config.colors["colors"].success))
                             .render(tab_area[1], buf)
                     }
                     _ => {}
@@ -208,7 +208,7 @@ impl Widget for &EchoCanvas {
             }
         }
 
-        let config = &self.config;
+        let config = &self.ui_config;
 
         match self.state.selected_tab {
             SelectedTab::Echo => render_echo(
@@ -221,9 +221,9 @@ impl Widget for &EchoCanvas {
                 max_samples as u64,
                 min_buffer_threshold,
                 fft,
-                self.config.colors["colors"].fg,
-                self.config.colors["colors"].title,
-                self.config.colors["colors"].border,
+                self.ui_config.colors["colors"].fg,
+                self.ui_config.colors["colors"].title,
+                self.ui_config.colors["colors"].border,
                 config,
                 &self.state.local_songs,
                 &self.state.selected_song_pos,
@@ -254,7 +254,7 @@ fn render_echo(
     low_color: Color,
     mid_color: Color,
     high_color: Color,
-    config: &Config,
+    config: &UiConfig,
     songs: &Vec<Song>,
     selected_song_pos: &usize,
     current_song: &Song,
@@ -403,8 +403,8 @@ fn render_echo(
     let upper_area = info[0];
     let lower_area = info[1];
 
-    let app_info = Line::from(" info ");
-    components::bordered_block(app_info, ratatui::style::Color::Red).render(upper_area, buf);
+    let app_info = Line::from(" PLAYLISTS ").style(Style::default().fg(config.colors["colors"].title));
+    components::bordered_block(app_info, ratatui::style::Color::from(config.colors["colors"].border)).render(upper_area, buf);
 
     let selected_song_metadata = &songs[*selected_song_pos].metadata;
 
