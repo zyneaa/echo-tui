@@ -29,8 +29,14 @@ pub enum EchoReport {
     #[error("Database error: {0}")]
     Sqlx(#[from] sqlx::Error),
 
+    #[error("Database migration error: {0}")]
+    MigrationError(#[from] sqlx::migrate::MigrateError),
+
     #[error("Config file error: {0}")]
-    TOML(#[from] toml::de::Error)
+    TOML(#[from] toml::de::Error),
+
+    #[error("Unexpected None value: {0}")]
+    NoneError(String),
 }
 
 pub type EchoResult<T> = Result<T, EchoReport>;

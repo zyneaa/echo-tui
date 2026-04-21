@@ -18,13 +18,13 @@ use tokio::{
     time::{self, Duration, Interval},
 };
 
-use crate::config::UiConfig;
 use crate::result::EchoResult;
 use crate::{app::State, awdio::AudioData};
 use crate::{
     app::{LogLevel, Report},
     awdio::AudioPlayer,
 };
+use crate::{config::UiConfig, ignite::Paths};
 
 pub mod actions;
 pub mod canvas;
@@ -38,6 +38,7 @@ pub struct EchoCanvas {
     audio_player: AudioPlayer,
     audio_state: Option<Arc<Mutex<AudioData>>>,
     report_rx: Receiver<Report>,
+    all_paths: Paths,
 }
 
 impl EchoCanvas {
@@ -48,6 +49,7 @@ impl EchoCanvas {
         audio_state: Option<Arc<Mutex<AudioData>>>,
         audio_player: AudioPlayer,
         report_rx: Receiver<Report>,
+        all_paths: Paths,
     ) -> Self {
         EchoCanvas {
             state,
@@ -56,6 +58,7 @@ impl EchoCanvas {
             audio_player,
             audio_state,
             report_rx,
+            all_paths
         }
     }
 

@@ -9,7 +9,7 @@ use ratatui::{
         canvas::{Canvas, Points},
     },
 };
-use std::io;
+use std::{io, path::PathBuf};
 use toml::to_string;
 
 use directories::ProjectDirs;
@@ -233,6 +233,7 @@ impl Widget for &EchoCanvas {
                 self.state.is_echo_metadata_buffer_being_filled,
                 &self.state.buffer,
                 enable_fft_compute,
+                &self.all_paths.songs
             ),
             SelectedTab::Playlist => render_playlist(body_area, buf),
             SelectedTab::Download => render_playlist(body_area, buf),
@@ -263,6 +264,7 @@ fn render_echo(
     is_echo_metadata_buffer_being_filled: bool,
     buffer: &String,
     enable_fft_compute: bool,
+    songs_path: &PathBuf
 ) {
     let chunks = if enable_fft_compute {
         Layout::default()
@@ -372,16 +374,15 @@ fn render_echo(
     let title_songs =
         Line::from(" SEARCH ").style(Style::default().fg(config.colors["colors"].title));
 
-    let proj = ProjectDirs::from("", "", "echo")
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "couldn't find dirs"))
-        .unwrap();
+    let proj = songs_path.to_string_lossy();
+
     let local_songs_block = components::bordered_block(
         title_songs,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
     .title_bottom(" ⎔  ⎔  FROM:")
     .title_style(Style::default().fg(config.colors["colors"].title))
-    .title_bottom(proj.config_dir().to_string_lossy())
+    .title_bottom(proj)
     .title_style(Style::default().fg(config.colors["colors"].title));
 
     components::local_songs_table(

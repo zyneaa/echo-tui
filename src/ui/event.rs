@@ -1,8 +1,11 @@
+use tokio::fs;
+
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 
 use super::EchoCanvas;
 use crate::app::{EchoSubTab, LogLevel, Report};
 use crate::awdio::AudioPlayer;
+use crate::awdio::metadata::Metadata;
 use crate::result::{EchoReport, EchoResult};
 use crate::{app::SelectedTab, awdio::skip, ui::AudioData};
 
@@ -10,7 +13,7 @@ impl EchoCanvas {
     pub async fn handle_events(&mut self, evt: Event) -> EchoResult<()> {
         let exit = match evt {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+                self.handle_key_event(key_event).await
             }
             _ => Ok(()),
         };
@@ -18,7 +21,7 @@ impl EchoCanvas {
         exit
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+    async fn handle_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
         match key_event.code {
             KeyCode::Esc => {
                 self.state.exit = true;
@@ -36,18 +39,121 @@ impl EchoCanvas {
         }
 
         match self.state.selected_tab {
-            SelectedTab::Echo => self.handle_echo_key_event(key_event)?,
+            SelectedTab::Echo => self.handle_echo_key_event(key_event).await?,
             _ => {}
         }
         Ok(())
     }
 
-    fn handle_echo_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+    async fn handle_echo_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
         if self.state.is_echo_metadata_buffer_being_filled {
             return self.handle_echo_metadata_key_event(key_event);
         }
 
         match key_event.code {
+            KeyCode::Char('i') => {
+                let pool = self.db_connection_pool.clone();
+                let song_path = self.all_paths.songs.clone();
+
+                tokio::spawn({
+                    let pool = pool.clone();
+                    let song_path = song_path.clone();
+
+                    async move {
+                        let mut entries = match fs::read_dir(&song_path).await {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("read_dir error: {:?}", e);
+                                return;
+                            }
+                        };
+
+                        while let Ok(Some(entry)) = entries.next_entry().await {
+                            let old_path = entry.path();
+
+                            if old_path.is_dir() {
+                                continue;
+                            }
+
+                            if old_path.extension().and_then(|s| s.to_str()) != Some("mp3") {
+                                continue;
+                            }
+
+                            let stem = old_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+
+                            // skip already-renamed files (id.mp3)
+                            if stem.parse::<i64>().is_ok() {
+                                continue;
+                            }
+
+                            let path_str = match old_path.to_str() {
+                                Some(p) => p,
+                                None => {
+                                    eprintln!("invalid path encoding");
+                                    continue;
+                                }
+                            };
+
+                            let mut tag = match Metadata::from_path(path_str) {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    eprintln!("metadata error: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            let db_title = if tag.title.is_empty() {
+                                stem
+                            } else {
+                                &tag.title
+                            };
+
+                            let id = match sqlx::query!(
+                                "INSERT INTO songs (title, artist, album, file_path) VALUES (?, ?, ?, ?)",
+                                db_title,
+                                tag.artist,
+                                tag.album,
+                                "PENDING"
+                            )
+                            .execute(&pool)
+                            .await {
+                                Ok(res) => res.last_insert_rowid(),
+                                Err(e) => {
+                                    eprintln!("db insert error: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            let new_file_name = format!("{}.mp3", id);
+                            let new_path = song_path.join(&new_file_name);
+
+                            if let Err(e) = fs::rename(&old_path, &new_path).await {
+                                eprintln!("rename error: {:?}", e);
+                                continue;
+                            }
+
+                            tag.title = db_title.to_string();
+
+                            if let Some(new_path_str) = new_path.to_str() {
+                                if let Err(e) = tag.update_file(new_path_str) {
+                                    eprintln!("tag update error: {:?}", e);
+                                }
+
+                                if let Err(e) = sqlx::query!(
+                                    "UPDATE songs SET file_path = ? WHERE id = ?",
+                                    new_path_str,
+                                    id
+                                )
+                                .execute(&pool)
+                                .await
+                                {
+                                    eprintln!("db update error: {:?}", e);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
             KeyCode::Char('f') => {
                 let mut ok = self.audio_player.state.lock().unwrap();
                 ok.enable_fft_compute = !ok.enable_fft_compute;

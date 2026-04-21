@@ -258,7 +258,7 @@ pub async fn start(data: (UiConfig, SqlitePool, Paths)) -> EchoResult<()> {
     let local_songs = song::get_local_songs(data.2.songs.to_str().unwrap());
     state.local_songs = local_songs;
 
-    let mut canvas = ui::EchoCanvas::init(state, data.0, data.1, None, AudioPlayer::bad(), rx);
+    let mut canvas = ui::EchoCanvas::init(state, data.0, data.1, None, AudioPlayer::bad(), rx, data.2);
 
     let ui = canvas.paint().await;
 

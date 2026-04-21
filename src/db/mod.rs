@@ -10,5 +10,7 @@ pub async fn init_db(path: &str) -> EchoResult<SqlitePool> {
 
     let pool = SqlitePool::connect_with(options).await?;
 
+    sqlx::migrate!("./migrations").run(&pool).await?;
+
     Ok(pool)
 }
