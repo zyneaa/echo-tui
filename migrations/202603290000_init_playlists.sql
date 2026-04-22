@@ -1,18 +1,20 @@
 --- Song info
 CREATE TABLE IF NOT EXISTS songs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT DEFAULT 'Unknown Title',
-    artist TEXT DEFAULT 'Unknown Artist',
-    album TEXT DEFAULT 'Unknown Album',
-    year INTEGER,
-    genre TEXT,
-    track_number INTEGER,
-    total_tracks INTEGER,
-    disc_number INTEGER,
-    total_discs INTEGER,
-    album_artist TEXT,
+    title TEXT DEFAULT 'UNKNOWN TITLE',
+    artist TEXT DEFAULT 'UNKNOWN ARTISt',
+    album TEXT DEFAULT 'UNKNOWN ALBUM',
+    year INTEGER DEFAULT 0,
+    genre TEXT DEFAULT 'UNKNOWN GENRE',
+    track_number INTEGER DEFAULT 0,
+    total_tracks INTEGER DEFAULT 0,
+    disc_number INTEGER DEFAULT 0,
+    total_discs INTEGER DEFAULT 0,
+    album_artist TEXT DEFAULT 'UNKNOWN',
     file_path TEXT NOT NULL UNIQUE,
     has_cover BOOLEAN DEFAULT 0,
+    origin_readable DEFAULT 'UNKNOWN ORIGIN',
+    origin TEXT DEFAULT 'UNKNOWN ORIGIN',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

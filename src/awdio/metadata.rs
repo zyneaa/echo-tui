@@ -1,6 +1,6 @@
-use audiotags::{MimeType, Tag};
+use audiotags::Tag;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize)]
 pub struct Metadata {
     pub title: String,
     pub artist: String,
@@ -12,16 +12,38 @@ pub struct Metadata {
     pub disc_number: u32,
     pub total_discs: u32,
     pub album_artist: String,
-    pub cover: Option<AlbumArt>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AlbumArt {
-    pub data: Vec<u8>,
-    pub mime: MimeType,
+    pub cover: Option<String>,
 }
 
 impl Metadata {
+    pub fn new(
+        title: String,
+        artist: String,
+        album: String,
+        year: u32,
+        genre: String,
+        track_number: u32,
+        total_tracks: u32,
+        disc_number: u32,
+        total_discs: u32,
+        album_artist: String,
+        cover: Option<String>,
+    ) -> Self {
+        Metadata {
+            title,
+            artist,
+            album,
+            year,
+            genre,
+            track_number,
+            total_tracks,
+            disc_number,
+            total_discs,
+            album_artist,
+            cover,
+        }
+    }
+
     pub fn from_path(path: &str) -> Result<Metadata, audiotags::Error> {
         let tag = Tag::new().read_from_path(path)?;
 
@@ -36,10 +58,7 @@ impl Metadata {
             disc_number: tag.disc_number().unwrap_or(0) as u32,
             total_discs: tag.total_discs().unwrap_or(0) as u32,
             album_artist: tag.album_artist().unwrap_or("Unknown").to_string(),
-            cover: tag.album_cover().map(|pic| AlbumArt {
-                data: pic.data.into(),
-                mime: pic.mime_type,
-            }),
+            cover: Some("OK".into()),
         })
     }
 
@@ -64,16 +83,6 @@ impl Metadata {
         }
 
         tag.set_album_artist(&self.album_artist);
-
-        if let Some(art) = &self.cover {
-            tag.set_album_cover(audiotags::Picture {
-                mime_type: art.mime,
-                data: &art.data,
-            });
-        } else {
-            tag.remove_album_cover();
-        }
-
         tag.write_to_path(path)?;
 
         Ok(())

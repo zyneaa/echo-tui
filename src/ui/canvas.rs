@@ -9,15 +9,14 @@ use ratatui::{
         canvas::{Canvas, Points},
     },
 };
-use std::{io, path::PathBuf};
+use std::path::PathBuf;
 use toml::to_string;
 
-use directories::ProjectDirs;
-
 use crate::{
-    app::{EchoSubTab, LogLevel, SelectedTab},
+    app::{DownloadState, EchoTabState, LogLevel, PlaylistSubTab, SelectedTab},
     awdio::{DurationInfo, song::Song},
     config::UiConfig,
+    db::Playlist,
     ui::components::echo_metadata_table,
 };
 
@@ -115,8 +114,11 @@ impl Widget for &EchoCanvas {
         let is_playing_status = format!(
             " PLAYING: {} {} - ●  {} {}",
             !is_pause,
-            self.ui_config.animations["animations"].hpulse[self.state.animations.animation_hpulse.0],
-            self.state.is_echo_metadata_buffer_being_filled,
+            self.ui_config.animations["animations"].hpulse
+                [self.state.animations.animation_hpulse.0],
+            self.state
+                .echo_tab_state
+                .is_echo_metadata_buffer_being_filled,
             self.state.buffer
         );
         let title_block = components::bordered_block(
@@ -152,7 +154,9 @@ impl Widget for &EchoCanvas {
                 anim.vals[position] = self.ui_config.animations["animations"].timestamp.clone();
                 continue;
             }
-            anim.vals[i] = self.ui_config.animations["animations"].timestamp_bar.clone();
+            anim.vals[i] = self.ui_config.animations["animations"]
+                .timestamp_bar
+                .clone();
         }
         drop(anim);
 
@@ -200,7 +204,9 @@ impl Widget for &EchoCanvas {
                 match level {
                     LogLevel::INFO => {
                         components::unbordered_block(Line::from(format!(" ⚬ {}", val)))
-                            .title_style(Style::default().fg(self.ui_config.colors["colors"].success))
+                            .title_style(
+                                Style::default().fg(self.ui_config.colors["colors"].success),
+                            )
                             .render(tab_area[1], buf)
                     }
                     _ => {}
@@ -228,16 +234,29 @@ impl Widget for &EchoCanvas {
                 &self.state.local_songs,
                 &self.state.selected_song_pos,
                 &self.state.active_track,
-                &self.state.echo_subtab,
-                self.state.echo_metadata_selected_pos,
-                self.state.is_echo_metadata_buffer_being_filled,
+                &self.state.echo_tab_state,
                 &self.state.buffer,
-                enable_fft_compute,
-                &self.all_paths.songs
+                &self.all_paths.songs,
             ),
-            SelectedTab::Playlist => render_playlist(body_area, buf),
-            SelectedTab::Download => render_playlist(body_area, buf),
-            SelectedTab::Misc => render_playlist(body_area, buf),
+            SelectedTab::Playlist => render_playlist_tab(
+                body_area,
+                buf,
+                config,
+                &self.state.playlists,
+                self.state.selected_playlist_idx,
+                &self.state.playlist_songs,
+                self.state.selected_playlist_song_idx,
+                &self.state.playlist_subtab,
+                &self.state.playlist_name_buffer,
+            ),
+            SelectedTab::Download => render_download_tab(
+                body_area,
+                buf,
+                config,
+                &self.state.download_state,
+                &self.state.download_url_buffer,
+            ),
+            SelectedTab::Misc => render_misc(body_area, buf, config),
         }
     }
 }
@@ -259,14 +278,11 @@ fn render_echo(
     songs: &Vec<Song>,
     selected_song_pos: &usize,
     current_song: &Song,
-    echo_subtab: &EchoSubTab,
-    echo_selected_metadata_pos: usize,
-    is_echo_metadata_buffer_being_filled: bool,
+    echo_tab_state: &EchoTabState,
     buffer: &String,
-    enable_fft_compute: bool,
-    songs_path: &PathBuf
+    songs_path: &PathBuf,
 ) {
-    let chunks = if enable_fft_compute {
+    let chunks = if echo_tab_state.is_fft_enable {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
@@ -281,7 +297,7 @@ fn render_echo(
     let ttf_area = chunks[0];
     let body_area = chunks[1];
 
-    if enable_fft_compute {
+    if echo_tab_state.is_fft_enable {
         let title_ttf = Line::from(" ▪︎ ");
         let ttf_block = components::bordered_block(title_ttf, low_color)
             .border_style(Style::new().fg(high_color))
@@ -371,13 +387,61 @@ fn render_echo(
     let left_area = body[0];
     let right_area = body[1];
 
-    let title_songs =
-        Line::from(" SEARCH ").style(Style::default().fg(config.colors["colors"].title));
+    let echo_main_title = Line::from(vec![
+        Span::styled(
+            " S",
+            Style::default()
+                .bg(config.colors["colors"].info)
+                .fg(config.colors["colors"].title),
+        ),
+        Span::styled(
+            "EARCH ·· ",
+            Style::default()
+                .bg(config.colors["colors"].info)
+                .fg(config.colors["colors"].title),
+        ),
+        Span::styled(
+            "|",
+            Style::default()
+                .bg(config.colors["colors"].title)
+                .fg(config.colors["colors"].info),
+        ),
+        Span::styled(
+            " I",
+            Style::default()
+                .bg(config.colors["colors"].title)
+                .fg(config.colors["colors"].info),
+        ),
+        Span::styled(
+            "MPORT + ",
+            Style::default()
+                .bg(config.colors["colors"].title)
+                .fg(config.colors["colors"].bg),
+        ),
+        Span::styled(
+            "|",
+            Style::default()
+                .bg(config.colors["colors"].title)
+                .fg(config.colors["colors"].info),
+        ),
+        Span::styled(
+            " D",
+            Style::default()
+                .bg(config.colors["colors"].title)
+                .fg(config.colors["colors"].info),
+        ),
+        Span::styled(
+            "OWNLOAD ▼ ",
+            Style::default()
+                .bg(config.colors["colors"].title)
+                .fg(config.colors["colors"].bg),
+        ),
+    ]);
 
     let proj = songs_path.to_string_lossy();
 
     let local_songs_block = components::bordered_block(
-        title_songs,
+        echo_main_title,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
     .title_bottom(" ⎔  ⎔  FROM:")
@@ -392,7 +456,7 @@ fn render_echo(
         config.colors["colors"].accent,
         config.colors["colors"].title,
         selected_song_pos,
-        echo_subtab,
+        &echo_tab_state.echo_subtab,
     )
     .block(local_songs_block)
     .render(left_area, buf);
@@ -404,8 +468,13 @@ fn render_echo(
     let upper_area = info[0];
     let lower_area = info[1];
 
-    let app_info = Line::from(" PLAYLISTS ").style(Style::default().fg(config.colors["colors"].title));
-    components::bordered_block(app_info, ratatui::style::Color::from(config.colors["colors"].border)).render(upper_area, buf);
+    let app_info =
+        Line::from(" PLAYLISTS ").style(Style::default().fg(config.colors["colors"].title));
+    components::bordered_block(
+        app_info,
+        ratatui::style::Color::from(config.colors["colors"].border),
+    )
+    .render(upper_area, buf);
 
     let selected_song_metadata = &songs[*selected_song_pos].metadata;
 
@@ -427,8 +496,8 @@ fn render_echo(
     ];
     let table = echo_metadata_table(
         metadata,
-        echo_selected_metadata_pos,
-        echo_subtab,
+        echo_tab_state.echo_metadata_selected_pos,
+        &echo_tab_state.echo_subtab,
         config.colors["colors"].title,
         config.colors["colors"].fg,
     );
@@ -458,29 +527,175 @@ fn render_echo(
     table.block(metadata_block).render(lower_area, buf);
 }
 
-fn render_playlist(area: Rect, buf: &mut Buffer) {
+fn render_download_tab(
+    area: Rect,
+    buf: &mut Buffer,
+    config: &UiConfig,
+    download_state: &DownloadState,
+    url_buffer: &str,
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints([Constraint::Length(5), Constraint::Min(1)])
         .split(area);
-    let ttf_area = chunks[0];
-    let body_area = chunks[1];
 
-    let title_ttf = Line::from(" TTF ");
-    components::bordered_block(title_ttf, ratatui::style::Color::Red).render(ttf_area, buf);
+    let input_area = chunks[0];
+    let status_area = chunks[1];
 
+    let (input_title, input_content) = match download_state {
+        DownloadState::Idle => (" DOWNLOAD ·· press 'd' to enter URL ", String::new()),
+        DownloadState::InputUrl => (
+            " ENTER URL ·· press Enter to download ",
+            url_buffer.to_string(),
+        ),
+        DownloadState::Downloading => (" DOWNLOADING... ", "Please wait...".into()),
+        DownloadState::Done(msg) => (" DONE ", msg.clone()),
+        DownloadState::Error(msg) => (" ERROR ", msg.clone()),
+    };
+
+    let input_block = components::bordered_block(
+        Line::from(input_title).style(Style::default().fg(config.colors["colors"].title)),
+        config.colors["colors"].border,
+    )
+    .title_style(Style::default().fg(config.colors["colors"].title));
+
+    let cursor = if matches!(download_state, DownloadState::InputUrl) {
+        "█"
+    } else {
+        ""
+    };
+
+    components::paragraph(
+        vec![
+            Line::from(""),
+            Line::from(format!("  {}{}", input_content, cursor)),
+        ],
+        input_block,
+    )
+    .style(Style::default().fg(config.colors["colors"].fg))
+    .render(input_area, buf);
+
+    let help_lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "  ── Keybindings ──",
+            Style::default().fg(config.colors["colors"].title),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "   d       Enter URL input mode",
+            Style::default().fg(config.colors["colors"].fg),
+        )),
+        Line::from(Span::styled(
+            "   Enter   Start download",
+            Style::default().fg(config.colors["colors"].fg),
+        )),
+        Line::from(Span::styled(
+            "   Esc     Cancel input",
+            Style::default().fg(config.colors["colors"].fg),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Songs are saved to the local songs directory.",
+            Style::default().fg(config.colors["colors"].accent),
+        )),
+        Line::from(Span::styled(
+            "  Requires yt-dlp to be installed on the system.",
+            Style::default().fg(config.colors["colors"].accent),
+        )),
+    ];
+
+    let status_block = components::bordered_block(
+        Line::from(" INFO ").style(Style::default().fg(config.colors["colors"].title)),
+        config.colors["colors"].border,
+    )
+    .title_style(Style::default().fg(config.colors["colors"].title));
+
+    components::paragraph(help_lines, status_block)
+        .style(Style::default().fg(config.colors["colors"].fg))
+        .render(status_area, buf);
+}
+
+fn render_playlist_tab(
+    area: Rect,
+    buf: &mut Buffer,
+    config: &UiConfig,
+    playlists: &[Playlist],
+    selected_playlist_idx: usize,
+    playlist_songs: &[Song],
+    selected_playlist_song_idx: usize,
+    playlist_subtab: &PlaylistSubTab,
+    name_buffer: &str,
+) {
     let body = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-        .split(body_area);
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(area);
     let left_area = body[0];
     let right_area = body[1];
 
-    let title_songs = Line::from(" Playlist ");
-    components::bordered_block(title_songs, ratatui::style::Color::Red).render(left_area, buf);
+    let pl_title = match playlist_subtab {
+        PlaylistSubTab::InputName => format!(" NEW PLAYLIST: {}█ ", name_buffer),
+        _ => " PLAYLISTS ·· n:new d:del a:add R:refresh ".into(),
+    };
 
-    let title_metadata = Line::from(" METADATA ");
-    components::bordered_block(title_metadata, ratatui::style::Color::Red).render(right_area, buf);
+    let pl_block = components::bordered_block(
+        Line::from(pl_title).style(Style::default().fg(config.colors["colors"].title)),
+        config.colors["colors"].border,
+    )
+    .title_style(Style::default().fg(config.colors["colors"].title))
+    .title_bottom(Line::from(format!(" {} playlists ", playlists.len())));
+
+    components::playlist_list_table(
+        playlists,
+        selected_playlist_idx,
+        matches!(
+            playlist_subtab,
+            PlaylistSubTab::List | PlaylistSubTab::InputName
+        ),
+        config.colors["colors"].fg,
+        config.colors["colors"].title,
+    )
+    .block(pl_block)
+    .render(left_area, buf);
+
+    let songs_title = if playlists.is_empty() {
+        " SONGS ".to_string()
+    } else if let Some(pl) = playlists.get(selected_playlist_idx) {
+        format!(
+            " {} ·· {} songs ·· r:remove ",
+            pl.name,
+            playlist_songs.len()
+        )
+    } else {
+        " SONGS ".to_string()
+    };
+
+    let songs_block = components::bordered_block(
+        Line::from(songs_title).style(Style::default().fg(config.colors["colors"].title)),
+        config.colors["colors"].border,
+    )
+    .title_style(Style::default().fg(config.colors["colors"].title))
+    .title_bottom(Line::from(" Enter: play · Backspace: back "));
+
+    components::playlist_songs_table(
+        playlist_songs,
+        selected_playlist_song_idx,
+        matches!(playlist_subtab, PlaylistSubTab::Songs),
+        config.colors["colors"].fg,
+        config.colors["colors"].title,
+    )
+    .block(songs_block)
+    .render(right_area, buf);
+}
+
+fn render_misc(area: Rect, buf: &mut Buffer, config: &UiConfig) {
+    let block = components::bordered_block(
+        Line::from(" MISC ").style(Style::default().fg(config.colors["colors"].title)),
+        config.colors["colors"].border,
+    )
+    .title_style(Style::default().fg(config.colors["colors"].title));
+    block.render(area, buf);
 }
 
 fn hex_to_rgb(hex: &str) -> Option<(usize, usize, usize)> {

@@ -14,6 +14,7 @@ use super::awdio::song::Song;
 use super::result::EchoResult;
 use super::ui;
 use crate::awdio::{AudioPlayer, song};
+use crate::db::Playlist;
 use crate::result::EchoReport;
 use crate::{config::UiConfig, ignite::Paths};
 
@@ -46,6 +47,24 @@ pub enum EchoSubTab {
     SEARCH,
     INFO,
     METADATA,
+}
+
+#[derive(Debug, Default)]
+pub enum DownloadState {
+    #[default]
+    Idle,
+    InputUrl,
+    Downloading,
+    Done(String),
+    Error(String),
+}
+
+#[derive(Debug, Default)]
+pub enum PlaylistSubTab {
+    #[default]
+    List,
+    Songs,
+    InputName,
 }
 
 #[derive(Default, Debug, Clone, Copy, Display, FromRepr, EnumIter)]
@@ -114,14 +133,37 @@ impl Default for Report {
 }
 
 #[derive(Debug)]
+pub struct EchoTabState {
+    pub import_tab: bool,
+    pub download_tab: bool,
+    pub is_fft_enable: bool,
+    pub echo_subtab: EchoSubTab,
+    pub echo_metadata_selected_pos: usize,
+    pub is_echo_metadata_buffer_being_filled: bool,
+}
+
+impl EchoTabState {
+    pub fn new() -> Self {
+        Self {
+            import_tab: false,
+            download_tab: false,
+            is_fft_enable: true,
+            echo_subtab: EchoSubTab::SEARCH,
+            echo_metadata_selected_pos: 0,
+            is_echo_metadata_buffer_being_filled: false,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct State {
     pub exit: bool,
     pub selected_tab: SelectedTab,
+    pub echo_tab_state: EchoTabState,
 
     pub buffer: String,
 
     pub animations: AnimationState,
-    pub is_fft_enable: bool,
 
     pub active_track: Song,
 
@@ -141,12 +183,18 @@ pub struct State {
     pub report_tx: Sender<Report>,
     pub current_report: Option<Report>,
 
-    // Sub tabs
-    // Echo
-    pub echo_subtab: EchoSubTab,
-    // Echo METADATA
-    pub echo_metadata_selected_pos: usize,
-    pub is_echo_metadata_buffer_being_filled: bool,
+    // Download
+    pub download_state: DownloadState,
+    pub download_url_buffer: String,
+
+    // Playlist
+    pub playlists: Vec<Playlist>,
+    pub selected_playlist_idx: usize,
+    pub playlist_songs: Vec<Song>,
+    pub selected_playlist_song_idx: usize,
+    pub playlist_subtab: PlaylistSubTab,
+    pub playlist_name_buffer: String,
+    pub is_popup: bool,
 }
 
 impl State {
@@ -154,9 +202,9 @@ impl State {
         State {
             exit: false,
             selected_tab: SelectedTab::default(),
+            echo_tab_state: EchoTabState::new(),
             buffer: "".into(),
             animations: AnimationState::default(),
-            is_fft_enable: true,
             active_track: Song::default(),
             uptime: Duration::default(),
             uptime_readable: "".into(),
@@ -168,9 +216,15 @@ impl State {
             local_songs: Vec::new(),
             report_tx: tx,
             current_report: None,
-            echo_subtab: EchoSubTab::SEARCH,
-            echo_metadata_selected_pos: 0,
-            is_echo_metadata_buffer_being_filled: false,
+            download_state: DownloadState::default(),
+            download_url_buffer: String::new(),
+            playlists: Vec::new(),
+            selected_playlist_idx: 0,
+            playlist_songs: Vec::new(),
+            selected_playlist_song_idx: 0,
+            playlist_subtab: PlaylistSubTab::default(),
+            playlist_name_buffer: String::new(),
+            is_popup: false,
         }
     }
 
@@ -235,9 +289,9 @@ impl State {
 
     pub fn switch_echo_subtab(&mut self, keycode: char) {
         match keycode {
-            'M' => self.echo_subtab = EchoSubTab::METADATA,
-            'I' => self.echo_subtab = EchoSubTab::INFO,
-            'S' => self.echo_subtab = EchoSubTab::SEARCH,
+            'M' => self.echo_tab_state.echo_subtab = EchoSubTab::METADATA,
+            'I' => self.echo_tab_state.echo_subtab = EchoSubTab::INFO,
+            'S' => self.echo_tab_state.echo_subtab = EchoSubTab::SEARCH,
             _ => {}
         }
     }
@@ -258,7 +312,13 @@ pub async fn start(data: (UiConfig, SqlitePool, Paths)) -> EchoResult<()> {
     let local_songs = song::get_local_songs(data.2.songs.to_str().unwrap());
     state.local_songs = local_songs;
 
-    let mut canvas = ui::EchoCanvas::init(state, data.0, data.1, None, AudioPlayer::bad(), rx, data.2);
+    // Load playlists from DB
+    if let Ok(pls) = crate::db::get_all_playlists(&data.1).await {
+        state.playlists = pls;
+    }
+
+    let mut canvas =
+        ui::EchoCanvas::init(state, data.0, data.1, None, AudioPlayer::bad(), rx, data.2);
 
     let ui = canvas.paint().await;
 

@@ -37,6 +37,9 @@ pub enum EchoReport {
 
     #[error("Unexpected None value: {0}")]
     NoneError(String),
+
+    #[error("Download error: {0}")]
+    DownloadError(String),
 }
 
 pub type EchoResult<T> = Result<T, EchoReport>;

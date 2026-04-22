@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use crate::awdio::metadata;
+use crate::awdio::metadata::{self, Metadata};
 
 #[derive(Debug, Default, Clone)]
 pub struct Song {
@@ -13,6 +13,12 @@ impl Song {
         Song {
             metadata: metadata::Metadata::from_path(&path).unwrap(),
             path,
+        }
+    }
+
+    pub fn new_temp(path: String, metadata: Metadata) -> Self {
+        Song {
+            metadata, path
         }
     }
 

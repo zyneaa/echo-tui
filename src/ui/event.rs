@@ -3,9 +3,12 @@ use tokio::fs;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 
 use super::EchoCanvas;
-use crate::app::{EchoSubTab, LogLevel, Report};
+use crate::app::{DownloadState, EchoSubTab, LogLevel, PlaylistSubTab, Report};
 use crate::awdio::AudioPlayer;
 use crate::awdio::metadata::Metadata;
+use crate::awdio::song::Song;
+use crate::db;
+use crate::download;
 use crate::result::{EchoReport, EchoResult};
 use crate::{app::SelectedTab, awdio::skip, ui::AudioData};
 
@@ -24,6 +27,30 @@ impl EchoCanvas {
     async fn handle_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
         match key_event.code {
             KeyCode::Esc => {
+                // If we're in an input mode, cancel it; otherwise exit
+                match self.state.selected_tab {
+                    SelectedTab::Download => {
+                        if matches!(self.state.download_state, DownloadState::InputUrl) {
+                            self.state.download_state = DownloadState::Idle;
+                            self.state.download_url_buffer.clear();
+                            return Ok(());
+                        }
+                    }
+                    SelectedTab::Playlist => {
+                        if matches!(self.state.playlist_subtab, PlaylistSubTab::InputName) {
+                            self.state.playlist_subtab = PlaylistSubTab::List;
+                            self.state.playlist_name_buffer.clear();
+                            return Ok(());
+                        }
+                        if matches!(self.state.playlist_subtab, PlaylistSubTab::Songs) {
+                            self.state.playlist_subtab = PlaylistSubTab::List;
+                            self.state.playlist_songs.clear();
+                            self.state.selected_playlist_song_idx = 0;
+                            return Ok(());
+                        }
+                    }
+                    _ => {}
+                }
                 self.state.exit = true;
                 return Ok(());
             }
@@ -40,17 +67,24 @@ impl EchoCanvas {
 
         match self.state.selected_tab {
             SelectedTab::Echo => self.handle_echo_key_event(key_event).await?,
+            SelectedTab::Download => self.handle_download_key_event(key_event).await?,
+            SelectedTab::Playlist => self.handle_playlist_key_event(key_event).await?,
             _ => {}
         }
         Ok(())
     }
 
     async fn handle_echo_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
-        if self.state.is_echo_metadata_buffer_being_filled {
-            return self.handle_echo_metadata_key_event(key_event);
+        if self
+            .state
+            .echo_tab_state
+            .is_echo_metadata_buffer_being_filled
+        {
+            return self.handle_echo_metadata_key_event(key_event).await;
         }
 
         match key_event.code {
+            KeyCode::Char('I') => { self.state.echo_tab_state.import_tab = true },
             KeyCode::Char('i') => {
                 let pool = self.db_connection_pool.clone();
                 let song_path = self.all_paths.songs.clone();
@@ -167,9 +201,11 @@ impl EchoCanvas {
             KeyCode::Char('h') => self.skip_audio(-1.0)?,
             KeyCode::Char('l') => self.skip_audio(1.0)?,
 
-            _ => match self.state.echo_subtab {
+            _ => match self.state.echo_tab_state.echo_subtab {
                 EchoSubTab::SEARCH => return self.handle_echo_search_key_event(key_event),
-                EchoSubTab::METADATA => return self.handle_echo_metadata_key_event(key_event),
+                EchoSubTab::METADATA => {
+                    return self.handle_echo_metadata_key_event(key_event).await;
+                }
                 _ => {}
             },
         }
@@ -213,12 +249,16 @@ impl EchoCanvas {
         Ok(())
     }
 
-    fn handle_echo_metadata_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
-        if self.state.is_echo_metadata_buffer_being_filled {
+    async fn handle_echo_metadata_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+        if self
+            .state
+            .echo_tab_state
+            .is_echo_metadata_buffer_being_filled
+        {
             match key_event.code {
                 KeyCode::Enter => {
                     let selected_song = &mut self.state.local_songs[self.state.selected_song_pos];
-                    match self.state.echo_metadata_selected_pos {
+                    match self.state.echo_tab_state.echo_metadata_selected_pos {
                         0 => {
                             selected_song.metadata.title = self.state.buffer.clone();
                         }
@@ -272,6 +312,7 @@ impl EchoCanvas {
                     let metadata_to_save = selected_song.metadata.clone();
                     let path_to_save = selected_song.path.clone();
                     let reporter = self.state.report_tx.clone();
+                    let pool = self.db_connection_pool.clone();
                     tokio::spawn(async move {
                         if let Err(e) = metadata_to_save.update_file(&path_to_save) {
                             let _ = reporter.send(Report {
@@ -280,15 +321,29 @@ impl EchoCanvas {
                                 level: LogLevel::ERR,
                             });
                         } else {
-                            let _ = reporter.send(Report {
-                                log: Some("METADATA WRITTEN SUCCESS".into()),
-                                report: None,
-                                level: LogLevel::INFO,
-                            });
+                            // Also sync to DB
+                            if let Err(e) =
+                                db::update_song_metadata(&pool, &path_to_save, &metadata_to_save)
+                                    .await
+                            {
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("DB sync error: {}", e)),
+                                    report: None,
+                                    level: LogLevel::ERR,
+                                });
+                            } else {
+                                let _ = reporter.send(Report {
+                                    log: Some("METADATA WRITTEN SUCCESS".into()),
+                                    report: None,
+                                    level: LogLevel::INFO,
+                                });
+                            }
                         }
                     });
 
-                    self.state.is_echo_metadata_buffer_being_filled = false;
+                    self.state
+                        .echo_tab_state
+                        .is_echo_metadata_buffer_being_filled = false;
                     self.state.buffer = String::new();
 
                     return Ok(());
@@ -307,19 +362,24 @@ impl EchoCanvas {
 
         match key_event.code {
             KeyCode::Char('w') => {
-                self.state.echo_metadata_selected_pos =
-                    self.state.echo_metadata_selected_pos.saturating_sub(1)
+                self.state.echo_tab_state.echo_metadata_selected_pos = self
+                    .state
+                    .echo_tab_state
+                    .echo_metadata_selected_pos
+                    .saturating_sub(1)
             }
             KeyCode::Char('s') => {
-                self.state.echo_metadata_selected_pos =
-                    (self.state.echo_metadata_selected_pos + 1).min(8)
+                self.state.echo_tab_state.echo_metadata_selected_pos =
+                    (self.state.echo_tab_state.echo_metadata_selected_pos + 1).min(8)
             }
             KeyCode::Enter => {
-                self.state.is_echo_metadata_buffer_being_filled = true;
+                self.state
+                    .echo_tab_state
+                    .is_echo_metadata_buffer_being_filled = true;
                 let selected_song = &self.state.local_songs[self.state.selected_song_pos];
                 let metadata = &selected_song.metadata;
 
-                match self.state.echo_metadata_selected_pos {
+                match self.state.echo_tab_state.echo_metadata_selected_pos {
                     0 => self.state.buffer = metadata.title.clone(),
                     1 => self.state.buffer = metadata.artist.clone(),
                     2 => self.state.buffer = metadata.album.clone(),
@@ -335,6 +395,385 @@ impl EchoCanvas {
             _ => {}
         }
 
+        Ok(())
+    }
+
+    // ── Download tab ─────────────────────────────────────────────
+
+    async fn handle_download_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+        match &self.state.download_state {
+            DownloadState::InputUrl => match key_event.code {
+                KeyCode::Enter => {
+                    if self.state.download_url_buffer.trim().is_empty() {
+                        self.state.download_state = DownloadState::Idle;
+                        return Ok(());
+                    }
+
+                    let url = self.state.download_url_buffer.clone();
+                    let songs_dir = self.all_paths.songs.clone();
+                    let pool = self.db_connection_pool.clone();
+                    let reporter = self.state.report_tx.clone();
+
+                    self.state.download_state = DownloadState::Downloading;
+
+                    tokio::spawn(async move {
+                        let _ = reporter.send(Report {
+                            log: Some(format!("Downloading: {}", url)),
+                            report: None,
+                            level: LogLevel::INFO,
+                        });
+
+                        match download::download_mp3(&url, &songs_dir).await {
+                            Ok(downloaded_path) => {
+                                let path_str = downloaded_path.to_str().unwrap_or("").to_string();
+
+                                // Read metadata from the downloaded file
+                                let metadata = Metadata::from_path(&path_str).unwrap_or_default();
+
+                                // Insert into DB
+                                match db::insert_song(&pool, &metadata, &path_str).await {
+                                    Ok(id) => {
+                                        // Rename to {id}.mp3
+                                        let new_name = format!("{}.mp3", id);
+                                        let new_path = songs_dir.join(&new_name);
+
+                                        if let Err(e) =
+                                            tokio::fs::rename(&downloaded_path, &new_path).await
+                                        {
+                                            let _ = reporter.send(Report {
+                                                log: Some(format!("Rename error: {}", e)),
+                                                report: None,
+                                                level: LogLevel::ERR,
+                                            });
+                                            return;
+                                        }
+
+                                        if let Some(new_path_str) = new_path.to_str() {
+                                            // Update file_path in DB
+                                            let _ =
+                                                db::update_song_path(&pool, id, new_path_str).await;
+
+                                            // Update tags in the renamed file
+                                            let _ = metadata.update_file(new_path_str);
+                                        }
+
+                                        let _ = reporter.send(Report {
+                                            log: Some(format!(
+                                                "Downloaded: {} (id={})",
+                                                metadata.title, id
+                                            )),
+                                            report: None,
+                                            level: LogLevel::INFO,
+                                        });
+                                    }
+                                    Err(e) => {
+                                        let _ = reporter.send(Report {
+                                            log: Some(format!("DB insert error: {}", e)),
+                                            report: None,
+                                            level: LogLevel::ERR,
+                                        });
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("Download failed: {}", e)),
+                                    report: None,
+                                    level: LogLevel::ERR,
+                                });
+                            }
+                        }
+                    });
+
+                    self.state.download_url_buffer.clear();
+                    self.state.download_state = DownloadState::Idle;
+                }
+                KeyCode::Char(c) => {
+                    self.state.download_url_buffer.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.state.download_url_buffer.pop();
+                }
+                _ => {}
+            },
+            _ => match key_event.code {
+                KeyCode::Char('d') => {
+                    self.state.download_state = DownloadState::InputUrl;
+                    self.state.download_url_buffer.clear();
+                }
+                _ => {}
+            },
+        }
+        Ok(())
+    }
+
+    // ── Playlist tab ─────────────────────────────────────────────
+
+    async fn handle_playlist_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+        match &self.state.playlist_subtab {
+            PlaylistSubTab::InputName => match key_event.code {
+                KeyCode::Enter => {
+                    let name = self.state.playlist_name_buffer.trim().to_string();
+                    if !name.is_empty() {
+                        let pool = self.db_connection_pool.clone();
+                        let reporter = self.state.report_tx.clone();
+                        match db::create_playlist(&pool, &name).await {
+                            Ok(_id) => {
+                                // Refresh playlists
+                                if let Ok(pls) = db::get_all_playlists(&pool).await {
+                                    self.state.playlists = pls;
+                                }
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("Created playlist: {}", name)),
+                                    report: None,
+                                    level: LogLevel::INFO,
+                                });
+                            }
+                            Err(e) => {
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("Create playlist error: {}", e)),
+                                    report: None,
+                                    level: LogLevel::ERR,
+                                });
+                            }
+                        }
+                    }
+                    self.state.playlist_name_buffer.clear();
+                    self.state.playlist_subtab = PlaylistSubTab::List;
+                }
+                KeyCode::Char(c) => {
+                    self.state.playlist_name_buffer.push(c);
+                }
+                KeyCode::Backspace => {
+                    self.state.playlist_name_buffer.pop();
+                }
+                _ => {}
+            },
+            PlaylistSubTab::List => match key_event.code {
+                KeyCode::Char('n') => {
+                    self.state.playlist_subtab = PlaylistSubTab::InputName;
+                    self.state.playlist_name_buffer.clear();
+                }
+                KeyCode::Char('w') => {
+                    self.state.selected_playlist_idx =
+                        self.state.selected_playlist_idx.saturating_sub(1);
+                }
+                KeyCode::Char('s') => {
+                    if !self.state.playlists.is_empty() {
+                        self.state.selected_playlist_idx = (self.state.selected_playlist_idx + 1)
+                            .min(self.state.playlists.len() - 1);
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if let Some(playlist) =
+                        self.state.playlists.get(self.state.selected_playlist_idx)
+                    {
+                        let pool = self.db_connection_pool.clone();
+                        let pid = playlist.id;
+                        let reporter = self.state.report_tx.clone();
+                        let name = playlist.name.clone();
+                        match db::delete_playlist(&pool, pid).await {
+                            Ok(()) => {
+                                if let Ok(pls) = db::get_all_playlists(&pool).await {
+                                    self.state.playlists = pls;
+                                }
+                                if self.state.selected_playlist_idx > 0 {
+                                    self.state.selected_playlist_idx -= 1;
+                                }
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("Deleted playlist: {}", name)),
+                                    report: None,
+                                    level: LogLevel::INFO,
+                                });
+                            }
+                            Err(e) => {
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("Delete error: {}", e)),
+                                    report: None,
+                                    level: LogLevel::ERR,
+                                });
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char('a') => {
+                    // Add current song from Echo tab to selected playlist
+                    if let Some(playlist) =
+                        self.state.playlists.get(self.state.selected_playlist_idx)
+                    {
+                        if let Some(song) = self.state.local_songs.get(self.state.selected_song_pos)
+                        {
+                            let pool = self.db_connection_pool.clone();
+                            let pid = playlist.id;
+                            let song_path = song.path.clone();
+                            let reporter = self.state.report_tx.clone();
+                            let song_title = song.metadata.title.clone();
+                            let playlist_name = playlist.name.clone();
+                            match db::add_song_to_playlist(&pool, pid, &song_path).await {
+                                Ok(()) => {
+                                    let _ = reporter.send(Report {
+                                        log: Some(format!(
+                                            "Added '{}' to '{}'",
+                                            song_title, playlist_name
+                                        )),
+                                        report: None,
+                                        level: LogLevel::INFO,
+                                    });
+                                }
+                                Err(e) => {
+                                    let _ = reporter.send(Report {
+                                        log: Some(format!("Add song error: {}", e)),
+                                        report: None,
+                                        level: LogLevel::ERR,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    // Enter the playlist to view songs
+                    if let Some(playlist) =
+                        self.state.playlists.get(self.state.selected_playlist_idx)
+                    {
+                        let pool = self.db_connection_pool.clone();
+                        let pid = playlist.id;
+                        match db::get_playlist_song_paths(&pool, pid).await {
+                            Ok(paths) => {
+                                let songs: Vec<Song> = paths
+                                    .iter()
+                                    .filter_map(|p| {
+                                        if std::path::Path::new(p).exists() {
+                                            Some(Song::new(p.clone()))
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect();
+                                self.state.playlist_songs = songs;
+                                self.state.selected_playlist_song_idx = 0;
+                                self.state.playlist_subtab = PlaylistSubTab::Songs;
+                            }
+                            Err(e) => {
+                                let reporter = self.state.report_tx.clone();
+                                let _ = reporter.send(Report {
+                                    log: Some(format!("Load songs error: {}", e)),
+                                    report: None,
+                                    level: LogLevel::ERR,
+                                });
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char('R') => {
+                    // Refresh playlists from DB
+                    let pool = self.db_connection_pool.clone();
+                    if let Ok(pls) = db::get_all_playlists(&pool).await {
+                        self.state.playlists = pls;
+                    }
+                }
+                _ => {}
+            },
+            PlaylistSubTab::Songs => match key_event.code {
+                KeyCode::Char('w') => {
+                    self.state.selected_playlist_song_idx =
+                        self.state.selected_playlist_song_idx.saturating_sub(1);
+                }
+                KeyCode::Char('s') => {
+                    if !self.state.playlist_songs.is_empty() {
+                        self.state.selected_playlist_song_idx =
+                            (self.state.selected_playlist_song_idx + 1)
+                                .min(self.state.playlist_songs.len() - 1);
+                    }
+                }
+                KeyCode::Char('r') => {
+                    // Remove song from playlist
+                    if let Some(playlist) =
+                        self.state.playlists.get(self.state.selected_playlist_idx)
+                    {
+                        if let Some(song) = self
+                            .state
+                            .playlist_songs
+                            .get(self.state.selected_playlist_song_idx)
+                        {
+                            let pool = self.db_connection_pool.clone();
+                            let pid = playlist.id;
+                            let song_path = song.path.clone();
+                            let reporter = self.state.report_tx.clone();
+                            match db::remove_song_from_playlist(&pool, pid, &song_path).await {
+                                Ok(()) => {
+                                    // Refresh
+                                    if let Ok(paths) = db::get_playlist_song_paths(&pool, pid).await
+                                    {
+                                        self.state.playlist_songs = paths
+                                            .iter()
+                                            .filter_map(|p| {
+                                                if std::path::Path::new(p).exists() {
+                                                    Some(Song::new(p.clone()))
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect();
+                                    }
+                                    if self.state.selected_playlist_song_idx > 0 {
+                                        self.state.selected_playlist_song_idx -= 1;
+                                    }
+                                    let _ = reporter.send(Report {
+                                        log: Some("Removed song from playlist".into()),
+                                        report: None,
+                                        level: LogLevel::INFO,
+                                    });
+                                }
+                                Err(e) => {
+                                    let _ = reporter.send(Report {
+                                        log: Some(format!("Remove error: {}", e)),
+                                        report: None,
+                                        level: LogLevel::ERR,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    // Play selected song
+                    if let Some(song) = self
+                        .state
+                        .playlist_songs
+                        .get(self.state.selected_playlist_song_idx)
+                    {
+                        let reporter = self.state.report_tx.clone();
+                        let audio_player = match AudioPlayer::new(&song.path) {
+                            Ok(player) => player,
+                            Err(e) => {
+                                reporter
+                                    .send(Report {
+                                        log: Some(e.to_string()),
+                                        report: Some(EchoReport::LockPoisoned(e.to_string())),
+                                        level: LogLevel::ERR,
+                                    })
+                                    .ok();
+                                AudioPlayer::bad()
+                            }
+                        };
+                        self.state.active_track = song.clone();
+                        self.audio_player = audio_player;
+                        let mut audio_state = Some(self.audio_player.state.clone());
+                        if let Err(_) = self.audio_player.play() {
+                            audio_state = None;
+                        }
+                        self.audio_state = audio_state;
+                    }
+                }
+                KeyCode::Backspace => {
+                    self.state.playlist_subtab = PlaylistSubTab::List;
+                    self.state.playlist_songs.clear();
+                    self.state.selected_playlist_song_idx = 0;
+                }
+                _ => {}
+            },
+        }
         Ok(())
     }
 

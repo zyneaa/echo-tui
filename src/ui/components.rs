@@ -1,9 +1,11 @@
+use crossterm::terminal::Clear;
 use ratatui::{
-    layout::Constraint,
+    Frame,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols::border,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, block::Title},
 };
 use strum::IntoEnumIterator;
 // use tracing::{debug, error, info, trace, warn};
@@ -11,6 +13,7 @@ use strum::IntoEnumIterator;
 use crate::{
     app::{EchoSubTab, SelectedTab},
     awdio::song::Song,
+    db::Playlist,
 };
 
 pub fn bordered_block(title: Line<'static>, color: Color) -> Block<'static> {
@@ -141,4 +144,113 @@ pub fn local_songs_table(
         [Constraint::Percentage(50), Constraint::Percentage(50)],
     )
     .row_highlight_style(selected_row_style)
+}
+
+pub fn playlist_list_table(
+    playlists: &[Playlist],
+    selected_idx: usize,
+    is_active: bool,
+    fg: Color,
+    title: Color,
+) -> Table<'static> {
+    let selected_style = if is_active {
+        Style::default().add_modifier(Modifier::REVERSED).fg(title)
+    } else {
+        Style::default().fg(fg)
+    };
+
+    let rows = playlists.iter().enumerate().map(|(i, pl)| {
+        let row_style = if i == selected_idx {
+            selected_style
+        } else {
+            Style::default().fg(fg)
+        };
+
+        Row::new(vec![Cell::from(Text::from(format!(" {}", pl.name)))])
+            .height(1)
+            .style(row_style)
+    });
+
+    Table::new(rows, [Constraint::Percentage(100)]).row_highlight_style(selected_style)
+}
+
+pub fn playlist_songs_table(
+    songs: &[Song],
+    selected_idx: usize,
+    is_active: bool,
+    fg: Color,
+    title: Color,
+) -> Table<'static> {
+    let selected_style = if is_active {
+        Style::default().add_modifier(Modifier::REVERSED).fg(title)
+    } else {
+        Style::default().fg(fg)
+    };
+
+    let rows = songs.iter().enumerate().map(|(i, song)| {
+        let row_style = if i == selected_idx {
+            selected_style
+        } else {
+            Style::default().fg(fg)
+        };
+
+        Row::new(vec![
+            Cell::from(Text::from(song.metadata.title.clone())),
+            Cell::from(Text::from(song.metadata.artist.clone())),
+        ])
+        .height(1)
+        .style(row_style)
+    });
+
+    Table::new(
+        rows,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .row_highlight_style(selected_style)
+}
+
+pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+pub fn draw_import_popup(f: &mut Frame, dummy_input: &str) {
+    let popup_area = centered_rect(60, 20, f.size());
+
+    // 3. Build the Block with Top and Bottom titles
+    let popup_block = Block::default()
+        // Top Title
+        .title(" Enter path to the file or folder ")
+        // Bottom Title (The Footer)
+        .title(
+            Title::from(" Press Enter to confirm ")
+                .position(ratatui::widgets::block::Position::Bottom)
+                .alignment(ratatui::layout::Alignment::Center),
+        )
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan)); // Cyan gives it that "active modal" aura
+
+    // 4. The Dummy Input Field
+    // We add a ">" prompt to make it look like a real terminal input
+    let input_widget = Paragraph::new(format!("> {}", dummy_input))
+        .style(Style::default().fg(Color::Yellow))
+        .block(popup_block);
+
+    // 5. Render it
+    f.render_widget(input_widget, popup_area);
 }

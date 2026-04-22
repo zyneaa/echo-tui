@@ -2,6 +2,7 @@ mod app;
 mod awdio;
 mod config;
 mod db;
+mod download;
 mod ignite;
 mod logger;
 mod result;
