@@ -1,11 +1,11 @@
-use crossterm::terminal::Clear;
+use std::path::Path;
+
 use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Constraint,
     style::{Color, Modifier, Style},
     symbols::border,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, block::Title},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
 };
 use strum::IntoEnumIterator;
 // use tracing::{debug, error, info, trace, warn};
@@ -209,48 +209,50 @@ pub fn playlist_songs_table(
     .row_highlight_style(selected_style)
 }
 
-pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
+pub fn path_input_block<'a>(
+    path_input: &'a str,
+    fg: Color,
+    title_color: Color,
+    echo_subtab: &EchoSubTab,
+    is_focused: bool,
+) -> Block<'a> {
+    let block_style;
+    match (echo_subtab, is_focused) {
+        (EchoSubTab::IMPORT, true) => {
+            block_style = Style::default()
+                .fg(title_color)
+                .add_modifier(Modifier::BOLD);
+        }
+        (EchoSubTab::SEARCH, true) => {
+            block_style = Style::default()
+                .fg(title_color)
+                .add_modifier(Modifier::BOLD);
+        }
+        (_, true) => {
+            block_style = Style::default().fg(fg).add_modifier(Modifier::REVERSED);
+        }
+        _ => {
+            block_style = Style::default().fg(fg);
+        }
+    }
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
-}
+    let file_name_hint = Path::new(path_input)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("...");
 
-pub fn draw_import_popup(f: &mut Frame, dummy_input: &str) {
-    let popup_area = centered_rect(60, 20, f.size());
-
-    // 3. Build the Block with Top and Bottom titles
-    let popup_block = Block::default()
-        // Top Title
-        .title(" Enter path to the file or folder ")
-        // Bottom Title (The Footer)
-        .title(
-            Title::from(" Press Enter to confirm ")
-                .position(ratatui::widgets::block::Position::Bottom)
-                .alignment(ratatui::layout::Alignment::Center),
-        )
+    Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan)); // Cyan gives it that "active modal" aura
-
-    // 4. The Dummy Input Field
-    // We add a ">" prompt to make it look like a real terminal input
-    let input_widget = Paragraph::new(format!("> {}", dummy_input))
-        .style(Style::default().fg(Color::Yellow))
-        .block(popup_block);
-
-    // 5. Render it
-    f.render_widget(input_widget, popup_area);
+        .border_set(border::ROUNDED)
+        .border_style(block_style)
+        .title(Line::from(vec![
+            Span::styled(" [ ", Style::default().fg(fg)),
+            Span::styled(
+                "FILE PATH",
+                Style::default()
+                    .fg(title_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!(" | {} ] ", file_name_hint), Style::default().fg(fg)),
+        ]))
 }

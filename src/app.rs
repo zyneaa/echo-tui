@@ -45,8 +45,9 @@ pub struct AnimationState {
 #[derive(Debug)]
 pub enum EchoSubTab {
     SEARCH,
-    INFO,
     METADATA,
+    IMPORT,
+    DOWNLOAD
 }
 
 #[derive(Debug, Default)]
@@ -134,9 +135,8 @@ impl Default for Report {
 
 #[derive(Debug)]
 pub struct EchoTabState {
-    pub import_tab: bool,
-    pub download_tab: bool,
     pub is_fft_enable: bool,
+    pub prev_sub_state: EchoSubTab,
     pub echo_subtab: EchoSubTab,
     pub echo_metadata_selected_pos: usize,
     pub is_echo_metadata_buffer_being_filled: bool,
@@ -145,9 +145,8 @@ pub struct EchoTabState {
 impl EchoTabState {
     pub fn new() -> Self {
         Self {
-            import_tab: false,
-            download_tab: false,
             is_fft_enable: true,
+            prev_sub_state: EchoSubTab::SEARCH,
             echo_subtab: EchoSubTab::SEARCH,
             echo_metadata_selected_pos: 0,
             is_echo_metadata_buffer_being_filled: false,
@@ -290,8 +289,9 @@ impl State {
     pub fn switch_echo_subtab(&mut self, keycode: char) {
         match keycode {
             'M' => self.echo_tab_state.echo_subtab = EchoSubTab::METADATA,
-            'I' => self.echo_tab_state.echo_subtab = EchoSubTab::INFO,
             'S' => self.echo_tab_state.echo_subtab = EchoSubTab::SEARCH,
+            'I' => self.echo_tab_state.echo_subtab = EchoSubTab::IMPORT,
+            'D' => self.echo_tab_state.echo_subtab = EchoSubTab::DOWNLOAD,
             _ => {}
         }
     }

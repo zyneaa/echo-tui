@@ -4,16 +4,16 @@ use ratatui::{
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{
-        Padding, Widget,
+        Padding, Paragraph, Widget,
         block::Title,
         canvas::{Canvas, Points},
     },
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use toml::to_string;
 
 use crate::{
-    app::{DownloadState, EchoTabState, LogLevel, PlaylistSubTab, SelectedTab},
+    app::{DownloadState, EchoSubTab, EchoTabState, LogLevel, PlaylistSubTab, SelectedTab},
     awdio::{DurationInfo, song::Song},
     config::UiConfig,
     db::Playlist,
@@ -282,6 +282,10 @@ fn render_echo(
     buffer: &String,
     songs_path: &PathBuf,
 ) {
+    let info = config.colors["colors"].info;
+    let title = config.colors["colors"].title;
+    let bg = config.colors["colors"].bg;
+
     let chunks = if echo_tab_state.is_fft_enable {
         Layout::default()
             .direction(Direction::Vertical)
@@ -387,86 +391,80 @@ fn render_echo(
     let left_area = body[0];
     let right_area = body[1];
 
-    let echo_main_title = Line::from(vec![
-        Span::styled(
-            " S",
-            Style::default()
-                .bg(config.colors["colors"].info)
-                .fg(config.colors["colors"].title),
-        ),
-        Span::styled(
-            "EARCH ·· ",
-            Style::default()
-                .bg(config.colors["colors"].info)
-                .fg(config.colors["colors"].title),
-        ),
-        Span::styled(
-            "|",
-            Style::default()
-                .bg(config.colors["colors"].title)
-                .fg(config.colors["colors"].info),
-        ),
-        Span::styled(
-            " I",
-            Style::default()
-                .bg(config.colors["colors"].title)
-                .fg(config.colors["colors"].info),
-        ),
-        Span::styled(
-            "MPORT + ",
-            Style::default()
-                .bg(config.colors["colors"].title)
-                .fg(config.colors["colors"].bg),
-        ),
-        Span::styled(
-            "|",
-            Style::default()
-                .bg(config.colors["colors"].title)
-                .fg(config.colors["colors"].info),
-        ),
-        Span::styled(
-            " D",
-            Style::default()
-                .bg(config.colors["colors"].title)
-                .fg(config.colors["colors"].info),
-        ),
-        Span::styled(
-            "OWNLOAD ▼ ",
-            Style::default()
-                .bg(config.colors["colors"].title)
-                .fg(config.colors["colors"].bg),
-        ),
-    ]);
+    let echo_main_title = match echo_tab_state.echo_subtab {
+        EchoSubTab::IMPORT => echo_main_title_import(info, title, bg),
+        EchoSubTab::SEARCH => echo_main_title_search(info, title, bg),
+        EchoSubTab::DOWNLOAD => echo_main_title_download(info, title, bg),
+        _ => echo_main_title_metadata(info, title, bg),
+    };
 
-    let proj = songs_path.to_string_lossy();
+    match echo_tab_state.echo_subtab {
+        EchoSubTab::DOWNLOAD => {}
+        EchoSubTab::IMPORT => {
+            render_import_subtab(
+                left_area,
+                buf,
+                echo_main_title.clone(),
+                config,
+                buffer,
+                info,
+                title,
+                echo_tab_state,
+            );
+        }
+        EchoSubTab::SEARCH => {
+            render_search_subtab(
+                left_area,
+                buf,
+                echo_main_title.clone(),
+                config,
+                buffer,
+                info,
+                title,
+                echo_tab_state,
+                songs_path,
+                songs,
+                selected_song_pos,
+            );
+        }
+        _ => match echo_tab_state.prev_sub_state {
+            EchoSubTab::SEARCH => {
+                render_search_subtab(
+                    left_area,
+                    buf,
+                    echo_main_title.clone(),
+                    config,
+                    buffer,
+                    info,
+                    title,
+                    echo_tab_state,
+                    songs_path,
+                    songs,
+                    selected_song_pos,
+                );
+            }
+            EchoSubTab::IMPORT => {
+                render_import_subtab(
+                    left_area,
+                    buf,
+                    echo_main_title.clone(),
+                    config,
+                    buffer,
+                    info,
+                    title,
+                    echo_tab_state,
+                );
+            }
+            _ => {}
+        },
+    }
 
-    let local_songs_block = components::bordered_block(
-        echo_main_title,
-        ratatui::style::Color::from(config.colors["colors"].border),
-    )
-    .title_bottom(" ⎔  ⎔  FROM:")
-    .title_style(Style::default().fg(config.colors["colors"].title))
-    .title_bottom(proj)
-    .title_style(Style::default().fg(config.colors["colors"].title));
-
-    components::local_songs_table(
-        songs,
-        config.colors["colors"].fg,
-        config.colors["colors"].bg,
-        config.colors["colors"].accent,
-        config.colors["colors"].title,
-        selected_song_pos,
-        &echo_tab_state.echo_subtab,
-    )
-    .block(local_songs_block)
-    .render(left_area, buf);
-
-    let info = Layout::default()
+    let info_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(right_area);
-    let upper_area = info[0];
-    let lower_area = info[1];
+    let upper_area = info_layout[0];
+    let lower_area = info_layout[1];
 
     let app_info =
         Line::from(" PLAYLISTS ").style(Style::default().fg(config.colors["colors"].title));
@@ -502,13 +500,20 @@ fn render_echo(
         config.colors["colors"].fg,
     );
 
-    let metadata_title = Line::from(vec![
-        Span::styled(" M", Style::default().fg(config.colors["colors"].info)),
-        Span::styled(
-            "ETADATA ⌬ ·· ",
-            Style::default().fg(config.colors["colors"].title),
-        ),
-    ]);
+    let metadata_title = match echo_tab_state.echo_subtab {
+        EchoSubTab::METADATA => Line::from(vec![
+            Span::styled(" M", Style::default().fg(title).bg(info)),
+            Span::styled("ETADATA ⌬ ·· ", Style::default().fg(title).bg(info)),
+        ]),
+        _ => Line::from(vec![
+            Span::styled(
+                " M",
+                Style::default().fg(config.colors["colors"].info).bg(title),
+            ),
+            Span::styled("ETADATA ⌬ ·· ", Style::default().fg(bg).bg(title)),
+        ]),
+    };
+
     let metadata_block = components::bordered_block(
         metadata_title,
         ratatui::style::Color::from(config.colors["colors"].border),
@@ -740,4 +745,146 @@ fn gradient_steps(
     }
 
     result
+}
+
+fn echo_main_title_search<'a>(info: Color, title: Color, bg: Color) -> Line<'a> {
+    Line::from(vec![
+        Span::styled(" S", Style::default().bg(info).fg(title)),
+        Span::styled("EARCH ·· ", Style::default().bg(info).fg(title)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" I", Style::default().bg(title).fg(info)),
+        Span::styled("MPORT + ", Style::default().bg(title).fg(bg)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" D", Style::default().bg(title).fg(info)),
+        Span::styled("OWNLOAD ▼ ", Style::default().bg(title).fg(bg)),
+    ])
+}
+
+fn echo_main_title_import<'a>(info: Color, title: Color, bg: Color) -> Line<'a> {
+    Line::from(vec![
+        Span::styled(" S", Style::default().bg(title).fg(info)),
+        Span::styled("EARCH ·· ", Style::default().bg(title).fg(bg)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" I", Style::default().bg(info).fg(title)),
+        Span::styled("MPORT + ", Style::default().bg(info).fg(title)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" D", Style::default().bg(title).fg(info)),
+        Span::styled("OWNLOAD ▼ ", Style::default().bg(title).fg(bg)),
+    ])
+}
+
+fn echo_main_title_download<'a>(info: Color, title: Color, bg: Color) -> Line<'a> {
+    Line::from(vec![
+        Span::styled(" S", Style::default().bg(title).fg(info)),
+        Span::styled("EARCH ·· ", Style::default().bg(title).fg(bg)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" I", Style::default().bg(title).fg(info)),
+        Span::styled("MPORT + ", Style::default().bg(title).fg(bg)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" D", Style::default().bg(info).fg(title)),
+        Span::styled("OWNLOAD ▼ ", Style::default().bg(info).fg(title)),
+    ])
+}
+
+fn echo_main_title_metadata<'a>(info: Color, title: Color, bg: Color) -> Line<'a> {
+    Line::from(vec![
+        Span::styled(" S", Style::default().bg(title).fg(info)),
+        Span::styled("EARCH ·· ", Style::default().bg(title).fg(bg)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" I", Style::default().bg(title).fg(info)),
+        Span::styled("MPORT + ", Style::default().bg(title).fg(bg)),
+        Span::styled("|", Style::default().bg(title).fg(info)),
+        Span::styled(" D", Style::default().bg(title).fg(info)),
+        Span::styled("OWNLOAD ▼ ", Style::default().bg(title).fg(info)),
+    ])
+}
+
+fn render_import_subtab(
+    left_area: Rect,
+    buf: &mut Buffer,
+    echo_main_title: Line<'static>,
+    config: &UiConfig, // Adjust this type if needed
+    buffer: &String,
+    info: ratatui::style::Color,
+    title: ratatui::style::Color,
+    echo_tab_state: &EchoTabState,
+) {
+    let outer_block = components::bordered_block(
+        echo_main_title,
+        ratatui::style::Color::from(config.colors["colors"].border),
+    )
+    .title_bottom(" ⎔  ⎔  FOUND:")
+    .title_style(Style::default().fg(config.colors["colors"].title));
+
+    let inner_area = outer_block.inner(left_area);
+    outer_block.render(left_area, buf);
+
+    let import_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .split(inner_area);
+
+    let input_block =
+        components::path_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
+
+    let input_widget = Paragraph::new(buffer.as_str())
+        .block(input_block)
+        .style(Style::default().fg(info));
+
+    input_widget.render(import_layout[0], buf);
+}
+
+fn render_search_subtab<'a>(
+    left_area: Rect,
+    buf: &mut Buffer,
+    echo_main_title: Line<'static>,
+    config: &UiConfig,
+    buffer: &String,
+    info: ratatui::style::Color,
+    title: ratatui::style::Color,
+    echo_tab_state: &EchoTabState,
+    songs_path: &Path,
+    songs: &Vec<Song>,
+    selected_song_pos: &usize,
+) {
+    let proj = songs_path.to_string_lossy();
+    let outer_block = components::bordered_block(
+        echo_main_title,
+        ratatui::style::Color::from(config.colors["colors"].border),
+    )
+    .title_bottom(" ⎔  ⎔  FROM:")
+    .title_bottom(proj)
+    .title_style(Style::default().fg(config.colors["colors"].title));
+
+    let inner_area = outer_block.inner(left_area);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Input box height
+            Constraint::Min(0),    // Table takes the rest
+        ])
+        .split(inner_area);
+
+    outer_block.render(left_area, buf);
+
+    let input_block =
+        components::path_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
+
+    let input_widget = Paragraph::new(buffer.as_str())
+        .block(input_block)
+        .style(Style::default().fg(info));
+
+    input_widget.render(chunks[0], buf);
+
+    let table = components::local_songs_table(
+        songs,
+        config.colors["colors"].fg,
+        config.colors["colors"].bg,
+        config.colors["colors"].accent,
+        config.colors["colors"].title,
+        selected_song_pos,
+        &echo_tab_state.echo_subtab,
+    );
+
+    table.render(chunks[1], buf);
 }

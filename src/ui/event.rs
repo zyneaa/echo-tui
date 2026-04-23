@@ -84,7 +84,14 @@ impl EchoCanvas {
         }
 
         match key_event.code {
-            KeyCode::Char('I') => { self.state.echo_tab_state.import_tab = true },
+            KeyCode::Char('I') => {
+                self.state.echo_tab_state.prev_sub_state = EchoSubTab::IMPORT;
+                self.state.switch_echo_subtab('I')
+            }
+            KeyCode::Char('D') => {
+                self.state.echo_tab_state.prev_sub_state = EchoSubTab::DOWNLOAD;
+                self.state.switch_echo_subtab('D')
+            }
             KeyCode::Char('i') => {
                 let pool = self.db_connection_pool.clone();
                 let song_path = self.all_paths.songs.clone();
@@ -193,7 +200,10 @@ impl EchoCanvas {
                 ok.enable_fft_compute = !ok.enable_fft_compute;
             }
             KeyCode::Char('M') => self.state.switch_echo_subtab('M'),
-            KeyCode::Char('S') => self.state.switch_echo_subtab('S'),
+            KeyCode::Char('S') => {
+                self.state.echo_tab_state.prev_sub_state = EchoSubTab::SEARCH;
+                self.state.switch_echo_subtab('S')
+            }
 
             KeyCode::Char('P') => self.toggle_pause()?,
             KeyCode::Char('K') => self.adjust_volume(0.1)?,
