@@ -13,8 +13,9 @@ use tokio::time::{self, Interval};
 use super::awdio::song::Song;
 use super::result::EchoResult;
 use super::ui;
-use crate::awdio::{AudioPlayer, song};
+use crate::awdio::AudioPlayer;
 use crate::db::Playlist;
+use crate::db::library::Library;
 use crate::result::EchoReport;
 use crate::{config::UiConfig, ignite::Paths};
 
@@ -47,7 +48,7 @@ pub enum EchoSubTab {
     SEARCH,
     METADATA,
     IMPORT,
-    DOWNLOAD
+    DOWNLOAD,
 }
 
 #[derive(Debug, Default)]
@@ -138,8 +139,18 @@ pub struct EchoTabState {
     pub is_fft_enable: bool,
     pub prev_sub_state: EchoSubTab,
     pub echo_subtab: EchoSubTab,
+
     pub echo_metadata_selected_pos: usize,
     pub is_echo_metadata_buffer_being_filled: bool,
+    pub metadata_buffer: String,
+
+    pub is_echo_search_buffer_being_filled: bool,
+    pub search_buffer: String,
+
+    pub is_echo_import_buffer_being_filled: bool,
+    pub import_buffer: String,
+
+    pub is_zero_local_song: bool,
 }
 
 impl EchoTabState {
@@ -150,6 +161,12 @@ impl EchoTabState {
             echo_subtab: EchoSubTab::SEARCH,
             echo_metadata_selected_pos: 0,
             is_echo_metadata_buffer_being_filled: false,
+            is_echo_search_buffer_being_filled: false,
+            is_echo_import_buffer_being_filled: false,
+            is_zero_local_song: true,
+            metadata_buffer: "".into(),
+            search_buffer: "".into(),
+            import_buffer: "".into()
         }
     }
 }
@@ -309,7 +326,10 @@ pub async fn start(data: (UiConfig, SqlitePool, Paths)) -> EchoResult<()> {
         data.0.animations["animations"].timestamp_bar.clone(),
     );
 
-    let local_songs = song::get_local_songs(data.2.songs.to_str().unwrap());
+    let local_songs = Library::get_songs_from_db(&data.1, 0, 10).await?;
+    if local_songs.len() == 0 {
+        state.echo_tab_state.is_zero_local_song = true;
+    }
     state.local_songs = local_songs;
 
     // Load playlists from DB

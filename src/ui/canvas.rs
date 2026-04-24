@@ -235,7 +235,6 @@ impl Widget for &EchoCanvas {
                 &self.state.selected_song_pos,
                 &self.state.active_track,
                 &self.state.echo_tab_state,
-                &self.state.buffer,
                 &self.all_paths.songs,
             ),
             SelectedTab::Playlist => render_playlist_tab(
@@ -279,12 +278,12 @@ fn render_echo(
     selected_song_pos: &usize,
     current_song: &Song,
     echo_tab_state: &EchoTabState,
-    buffer: &String,
     songs_path: &PathBuf,
 ) {
     let info = config.colors["colors"].info;
     let title = config.colors["colors"].title;
     let bg = config.colors["colors"].bg;
+    let buffer = &echo_tab_state.metadata_buffer;
 
     let chunks = if echo_tab_state.is_fft_enable {
         Layout::default()
@@ -418,7 +417,7 @@ fn render_echo(
                 buf,
                 echo_main_title.clone(),
                 config,
-                buffer,
+                &echo_tab_state.search_buffer,
                 info,
                 title,
                 echo_tab_state,
@@ -474,32 +473,6 @@ fn render_echo(
     )
     .render(upper_area, buf);
 
-    let selected_song_metadata = &songs[*selected_song_pos].metadata;
-
-    let year_binding = &to_string(&selected_song_metadata.year).unwrap_or_default();
-    let track_number_binding = &to_string(&selected_song_metadata.track_number).unwrap_or_default();
-    let total_tracks_binding = &to_string(&selected_song_metadata.total_tracks).unwrap_or_default();
-    let disc_number_binding = &to_string(&selected_song_metadata.disc_number).unwrap_or_default();
-    let total_discs_binding = &to_string(&selected_song_metadata.total_discs).unwrap_or_default();
-    let metadata = vec![
-        ("TITLE", &selected_song_metadata.title),
-        ("ARTIST", &selected_song_metadata.artist),
-        ("ALBUM", &selected_song_metadata.album),
-        ("YEAR", year_binding),
-        ("GENERE", &selected_song_metadata.genre),
-        ("TRACK NUMBER", track_number_binding),
-        ("TOTAL TRACK", total_tracks_binding),
-        ("DISC NUMBER", disc_number_binding),
-        ("TOTAL DISC", total_discs_binding),
-    ];
-    let table = echo_metadata_table(
-        metadata,
-        echo_tab_state.echo_metadata_selected_pos,
-        &echo_tab_state.echo_subtab,
-        config.colors["colors"].title,
-        config.colors["colors"].fg,
-    );
-
     let metadata_title = match echo_tab_state.echo_subtab {
         EchoSubTab::METADATA => Line::from(vec![
             Span::styled(" M", Style::default().fg(title).bg(info)),
@@ -528,6 +501,42 @@ fn render_echo(
             Style::default().fg(config.colors["colors"].title),
         ),
     ]));
+
+    if echo_tab_state.is_zero_local_song || songs.is_empty() {
+        let empty_msg = Paragraph::new("NO SONGS FOUND.")
+            .style(Style::default().fg(config.colors["colors"].fg))
+            .centered()
+            .block(metadata_block);
+
+        empty_msg.render(lower_area, buf);
+        return;
+    }
+
+    let selected_song_metadata = &songs[*selected_song_pos].metadata;
+
+    let year_binding = &to_string(&selected_song_metadata.year).unwrap_or_default();
+    let track_number_binding = &to_string(&selected_song_metadata.track_number).unwrap_or_default();
+    let total_tracks_binding = &to_string(&selected_song_metadata.total_tracks).unwrap_or_default();
+    let disc_number_binding = &to_string(&selected_song_metadata.disc_number).unwrap_or_default();
+    let total_discs_binding = &to_string(&selected_song_metadata.total_discs).unwrap_or_default();
+    let metadata = vec![
+        ("TITLE", &selected_song_metadata.title),
+        ("ARTIST", &selected_song_metadata.artist),
+        ("ALBUM", &selected_song_metadata.album),
+        ("YEAR", year_binding),
+        ("GENERE", &selected_song_metadata.genre),
+        ("TRACK NUMBER", track_number_binding),
+        ("TOTAL TRACK", total_tracks_binding),
+        ("DISC NUMBER", disc_number_binding),
+        ("TOTAL DISC", total_discs_binding),
+    ];
+    let table = echo_metadata_table(
+        metadata,
+        echo_tab_state.echo_metadata_selected_pos,
+        &echo_tab_state.echo_subtab,
+        config.colors["colors"].title,
+        config.colors["colors"].fg,
+    );
 
     table.block(metadata_block).render(lower_area, buf);
 }
@@ -825,7 +834,7 @@ fn render_import_subtab(
         .split(inner_area);
 
     let input_block =
-        components::path_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
+        components::inner_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
 
     let input_widget = Paragraph::new(buffer.as_str())
         .block(input_block)
@@ -868,7 +877,7 @@ fn render_search_subtab<'a>(
     outer_block.render(left_area, buf);
 
     let input_block =
-        components::path_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
+        components::inner_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
 
     let input_widget = Paragraph::new(buffer.as_str())
         .block(input_block)

@@ -209,8 +209,8 @@ pub fn playlist_songs_table(
     .row_highlight_style(selected_style)
 }
 
-pub fn path_input_block<'a>(
-    path_input: &'a str,
+pub fn inner_input_block<'a>(
+    input: &'a str,
     fg: Color,
     title_color: Color,
     echo_subtab: &EchoSubTab,
@@ -236,7 +236,7 @@ pub fn path_input_block<'a>(
         }
     }
 
-    let file_name_hint = Path::new(path_input)
+    let file_name_hint = Path::new(input)
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("...");
