@@ -147,6 +147,8 @@ impl EchoCanvas {
         Self::increment_frame_index(&mut self.state.animations.animation_spinner);
         Self::increment_frame_index(&mut self.state.animations.animation_hpulse);
         Self::increment_frame_index(&mut self.state.animations.animation_dot);
+
+        self.state.animations.is_blink = !self.state.animations.is_blink;
     }
 
     fn format_uptime(&mut self) -> String {

@@ -49,8 +49,15 @@ impl EchoCanvas {
                             return Ok(());
                         }
                     }
+                    SelectedTab::Echo => {
+                        if self.is_any_echo_buffer_active() {
+                            self.deavtivate_all_echo_buffer();
+                            return Ok(());
+                        }
+                    }
                     _ => {}
                 }
+
                 self.state.exit = true;
                 return Ok(());
             }
@@ -75,12 +82,16 @@ impl EchoCanvas {
     }
 
     async fn handle_echo_key_event(&mut self, key_event: KeyEvent) -> EchoResult<()> {
-        if self
-            .state
-            .echo_tab_state
-            .is_echo_metadata_buffer_being_filled
-        {
-            return self.handle_echo_metadata_key_event(key_event).await;
+        // later
+        // if self
+        //     .state
+        //     .echo_tab_state
+        //     .is_echo_metadata_buffer_being_filled
+        // {
+        //     return self.handle_echo_metadata_key_event(key_event).await;
+        // }
+        if self.state.echo_tab_state.is_echo_search_buffer_being_filled {
+            return self.handle_echo_search_key_event(key_event);
         }
 
         match (key_event.code, key_event.modifiers) {
@@ -194,7 +205,7 @@ impl EchoCanvas {
             (KeyCode::Char('h'), _) => self.skip_audio(-1.0)?,
             (KeyCode::Char('l'), _) => self.skip_audio(1.0)?,
 
-            (KeyCode::Enter, KeyModifiers::SHIFT) => match self.state.echo_tab_state.echo_subtab {
+            (KeyCode::Char('|'), _) => match self.state.echo_tab_state.echo_subtab {
                 EchoSubTab::SEARCH => {
                     self.state.echo_tab_state.is_echo_search_buffer_being_filled = true;
                     return self.handle_echo_search_key_event(key_event);
@@ -239,8 +250,21 @@ impl EchoCanvas {
         }
 
         match key_event.code {
-            KeyCode::Char('w') => self.state.previous_local_song(),
-            KeyCode::Char('s') => self.state.next_local_song(),
+            KeyCode::Esc => {
+                self.state.echo_tab_state.is_echo_search_buffer_being_filled = false;
+            }
+            KeyCode::Char('w') => {
+                if self.state.local_songs.len() == 0 {
+                    return Ok(());
+                }
+                self.state.previous_local_song()
+            }
+            KeyCode::Char('s') => {
+                if self.state.local_songs.len() == 0 {
+                    return Ok(());
+                }
+                self.state.next_local_song()
+            }
             KeyCode::Enter => match self.state.local_songs.get(self.state.selected_song_pos) {
                 Some(v) => {
                     let reporter = self.state.report_tx.clone();
@@ -838,5 +862,21 @@ impl EchoCanvas {
 
     pub fn previous_tab(&mut self) {
         self.state.selected_tab = self.state.selected_tab.previous();
+    }
+
+    pub fn is_any_echo_buffer_active(&self) -> bool {
+        self.state.echo_tab_state.is_echo_search_buffer_being_filled
+            || self.state.echo_tab_state.is_echo_import_buffer_being_filled
+            || self
+                .state
+                .echo_tab_state
+                .is_echo_metadata_buffer_being_filled
+    }
+
+    fn deavtivate_all_echo_buffer(&mut self) {
+        let state = &mut self.state.echo_tab_state;
+        state.is_echo_search_buffer_being_filled = false;
+        state.is_echo_import_buffer_being_filled = false;
+        state.is_echo_metadata_buffer_being_filled = false;
     }
 }

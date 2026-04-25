@@ -41,6 +41,8 @@ pub struct AnimationState {
     pub animation_spinner: (usize, usize),
     pub animation_hpulse: (usize, usize),
     pub animation_dot: (usize, usize),
+
+    pub is_blink: bool
 }
 
 #[derive(Debug)]

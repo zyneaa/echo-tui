@@ -433,7 +433,7 @@ fn render_echo(
                     buf,
                     echo_main_title.clone(),
                     config,
-                    buffer,
+                    &echo_tab_state.search_buffer,
                     info,
                     title,
                     echo_tab_state,
