@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tokio::fs;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -92,6 +94,8 @@ impl EchoCanvas {
         // }
         if self.state.echo_tab_state.is_echo_search_buffer_being_filled {
             return self.handle_echo_search_key_event(key_event);
+        } else if self.state.echo_tab_state.is_echo_import_buffer_being_filled {
+            return self.handle_echo_import_key_enent(key_event).await;
         }
 
         match (key_event.code, key_event.modifiers) {
@@ -244,6 +248,85 @@ impl EchoCanvas {
                 }
                 KeyCode::Enter => {
                     self.state.echo_tab_state.is_echo_import_buffer_being_filled = false;
+                    let pool = self.db_connection_pool.clone();
+                    let song_path = self.state.echo_tab_state.import_buffer.clone();
+
+                    tokio::spawn(async move {
+                        let mut entries = match fs::read_dir(&song_path).await {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("read_dir error: {:?}", e);
+                                return;
+                            }
+                        };
+
+                        while let Ok(Some(entry)) = entries.next_entry().await {
+                            let old_path = entry.path();
+                            if old_path.is_dir() {
+                                continue;
+                            }
+                            if old_path.extension().and_then(|s| s.to_str()) != Some("mp3") {
+                                continue;
+                            }
+
+                            let stem = old_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+
+                            let path_str = match old_path.to_str() {
+                                Some(p) => p,
+                                None => {
+                                    eprintln!("invalid path encoding");
+                                    continue;
+                                }
+                            };
+
+                            let mut tag = match Metadata::from_path(path_str) {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    eprintln!("metadata error: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            let db_title = if tag.title.is_empty() {
+                                stem
+                            } else {
+                                &tag.title
+                            };
+
+                            let id = match sqlx::query!(
+                            "INSERT INTO songs (title, artist, album, file_path) VALUES (?, ?, ?, ?)",
+                            db_title, tag.artist, tag.album, "PENDING"
+                        )
+                        .execute(&pool).await {
+                            Ok(res) => res.last_insert_rowid(),
+                            Err(e) => {
+                                eprintln!("db insert error: {:?}", e);
+                                continue;
+                            }
+                        };
+
+                            let new_file_name = format!("{}{}.mp3", song_path, id);
+                            let new_path = Path::new(&new_file_name);
+
+                            if let Err(e) = fs::rename(&old_path, &new_path).await {
+                                eprintln!("rename error: {:?}", e);
+                                continue;
+                            }
+
+                            tag.title = db_title.to_string();
+                            if let Some(new_path_str) = new_path.to_str() {
+                                let _ = tag.update_file(new_path_str);
+                                let _ = sqlx::query!(
+                                    "UPDATE songs SET file_path = ? WHERE id = ?",
+                                    new_path_str,
+                                    id
+                                )
+                                .execute(&pool)
+                                .await;
+                            }
+                        }
+                    });
+
                     return Ok(());
                 }
                 KeyCode::Backspace => {
