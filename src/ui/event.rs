@@ -211,7 +211,8 @@ impl EchoCanvas {
                     return self.handle_echo_search_key_event(key_event);
                 }
                 EchoSubTab::IMPORT => {
-                    self.state.echo_tab_state.is_echo_import_buffer_being_filled = true
+                    self.state.echo_tab_state.is_echo_import_buffer_being_filled = true;
+                    return self.handle_echo_import_key_enent(key_event).await;
                 }
 
                 EchoSubTab::METADATA => {
@@ -224,11 +225,37 @@ impl EchoCanvas {
 
             _ => match self.state.echo_tab_state.echo_subtab {
                 EchoSubTab::SEARCH => return self.handle_echo_search_key_event(key_event),
+                EchoSubTab::IMPORT => return self.handle_echo_import_key_enent(key_event).await,
                 EchoSubTab::METADATA => {
                     return self.handle_echo_metadata_key_event(key_event).await;
                 }
                 _ => {}
             },
+        }
+
+        Ok(())
+    }
+
+    async fn handle_echo_import_key_enent(&mut self, key_event: KeyEvent) -> EchoResult<()> {
+        if self.state.echo_tab_state.is_echo_import_buffer_being_filled {
+            match key_event.code {
+                KeyCode::Char(c) => {
+                    self.state.echo_tab_state.import_buffer.push(c);
+                }
+                KeyCode::Enter => {
+                    self.state.echo_tab_state.is_echo_import_buffer_being_filled = false;
+                    return Ok(());
+                }
+                KeyCode::Backspace => {
+                    self.state.echo_tab_state.import_buffer.pop();
+                    return Ok(());
+                }
+                KeyCode::Esc => {
+                    self.state.echo_tab_state.is_echo_import_buffer_being_filled = false;
+                    return Ok(());
+                }
+                _ => {}
+            }
         }
 
         Ok(())

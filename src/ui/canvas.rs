@@ -405,7 +405,7 @@ fn render_echo(
                 buf,
                 echo_main_title.clone(),
                 config,
-                buffer,
+                &echo_tab_state.import_buffer,
                 info,
                 title,
                 echo_tab_state,
