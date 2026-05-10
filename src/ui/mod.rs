@@ -27,9 +27,10 @@ use crate::{
 use crate::{config::UiConfig, ignite::Paths};
 
 pub mod actions;
-pub mod canvas;
-pub mod components;
+pub mod temp_components;
 pub mod event;
+pub mod layout;
+pub mod components;
 
 pub struct EchoCanvas {
     state: State,
