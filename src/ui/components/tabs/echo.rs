@@ -2,11 +2,21 @@ use std::path::{Path, PathBuf};
 
 use ratatui::text::Span;
 use ratatui::widgets::{Paragraph, Widget};
-use ratatui::{buffer::Buffer, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Style}, text::Line, widgets::{block::Title, canvas::{Canvas, Points}}};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::Line,
+    widgets::{
+        block::Title,
+        canvas::{Canvas, Points},
+    },
+};
 use toml::to_string;
 
 use crate::app::EchoSubTab;
-use crate::{app::EchoTabState, awdio::song::Song, config::UiConfig, ui::temp_components};
+use crate::ui::components::shared;
+use crate::{app::EchoTabState, awdio::song::Song, config::UiConfig};
 
 pub fn render_echo(
     area: Rect,
@@ -50,7 +60,7 @@ pub fn render_echo(
 
     if echo_tab_state.is_fft_enable {
         let title_ttf = Line::from(" ▪︎ ");
-        let ttf_block = temp_components::bordered_block(title_ttf, low_color)
+        let ttf_block = shared::block::bordered_block(title_ttf, low_color)
             .border_style(Style::new().fg(high_color))
             .title_style(Style::new().fg(mid_color));
         let fft_data: Vec<f64> = fft_state.iter().map(|value| *value as f64).collect();
@@ -215,7 +225,7 @@ pub fn render_echo(
 
     let app_info =
         Line::from(" PLAYLISTS ").style(Style::default().fg(config.colors["colors"].title));
-    temp_components::bordered_block(
+    shared::block::bordered_block(
         app_info,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
@@ -235,7 +245,7 @@ pub fn render_echo(
         ]),
     };
 
-    let metadata_block = temp_components::bordered_block(
+    let metadata_block = shared::block::bordered_block(
         metadata_title,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
@@ -278,7 +288,7 @@ pub fn render_echo(
         ("DISC NUMBER", disc_number_binding),
         ("TOTAL DISC", total_discs_binding),
     ];
-    let table = temp_components::echo_metadata_table(
+    let table = shared::table::echo_metadata_table(
         metadata,
         echo_tab_state.echo_metadata_selected_pos,
         &echo_tab_state.echo_subtab,
@@ -395,7 +405,7 @@ fn render_import_subtab(
     title: ratatui::style::Color,
     echo_tab_state: &EchoTabState,
 ) {
-    let outer_block = temp_components::bordered_block(
+    let outer_block = shared::block::bordered_block(
         echo_main_title,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
@@ -411,7 +421,7 @@ fn render_import_subtab(
         .split(inner_area);
 
     let input_block =
-        temp_components::inner_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
+        shared::block::inner_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
 
     let input_widget = Paragraph::new(buffer.as_str())
         .block(input_block)
@@ -434,7 +444,7 @@ fn render_search_subtab<'a>(
     selected_song_pos: &usize,
 ) {
     let proj = songs_path.to_string_lossy();
-    let outer_block = temp_components::bordered_block(
+    let outer_block = shared::block::bordered_block(
         echo_main_title,
         ratatui::style::Color::from(config.colors["colors"].border),
     )
@@ -454,7 +464,7 @@ fn render_search_subtab<'a>(
     outer_block.render(left_area, buf);
 
     let input_block =
-        temp_components::inner_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
+        shared::block::inner_input_block(buffer, info, title, &echo_tab_state.echo_subtab, true);
 
     let input_widget = Paragraph::new(buffer.as_str())
         .block(input_block)
@@ -462,7 +472,7 @@ fn render_search_subtab<'a>(
 
     input_widget.render(chunks[0], buf);
 
-    let table = temp_components::local_songs_table(
+    let table = shared::table::local_songs_table(
         songs,
         config.colors["colors"].fg,
         config.colors["colors"].bg,

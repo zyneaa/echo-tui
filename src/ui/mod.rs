@@ -27,7 +27,6 @@ use crate::{
 use crate::{config::UiConfig, ignite::Paths};
 
 pub mod actions;
-pub mod temp_components;
 pub mod event;
 pub mod layout;
 pub mod components;

@@ -13,11 +13,14 @@ use ratatui::{
 };
 
 use crate::{
-    app::{LogLevel, SelectedTab, State}, awdio::{AudioData, DurationInfo, current_timestamp}, config::UiConfig, ignite::Paths, ui::temp_components
+    app::{LogLevel, SelectedTab, State},
+    awdio::{AudioData, DurationInfo, current_timestamp},
+    config::UiConfig,
+    ignite::Paths,
 };
 
-mod tabs;
 mod shared;
+mod tabs;
 
 pub fn main_header(
     song_name_area: Rect,
@@ -28,7 +31,7 @@ pub fn main_header(
     state: &State,
     ui_config: &UiConfig,
     audio_state: &Option<Arc<Mutex<AudioData>>>,
-    all_paths: &Paths
+    all_paths: &Paths,
 ) {
     let (
         samples,
@@ -98,7 +101,7 @@ pub fn main_header(
         state.echo_tab_state.is_echo_metadata_buffer_being_filled,
         state.buffer
     );
-    let title_block = temp_components::bordered_block(
+    let title_block = shared::block::bordered_block(
         Line::from(vec![Span::raw(is_playing_status)]),
         ui_config.colors["colors"].border,
     )
@@ -108,12 +111,12 @@ pub fn main_header(
     .title_bottom(Line::from(format!(" CLK: {} ", duration.readable)).right_aligned())
     .title_style(Style::new().fg(ui_config.colors["colors"].title));
 
-    temp_components::paragraph(text, title_block)
+    shared::paragraph::paragraph(text, title_block)
         .style(Style::default().fg(ui_config.colors["colors"].fg))
         .render(song_name_area, buf);
 
     let timestamp_block =
-        temp_components::bordered_block(Line::default(), ui_config.colors["colors"].border)
+        shared::block::bordered_block(Line::default(), ui_config.colors["colors"].border)
             .title_style(Style::new().fg(ui_config.colors["colors"].title))
             .title(Line::from(format!(" UPTIME: {} ", state.uptime_readable)).right_aligned())
             .title(Line::from(" ⟐  ").left_aligned())
@@ -143,7 +146,7 @@ pub fn main_header(
         timestamp.1 as u64, timestamp.0, timestamp_percent, duration.readable, duration.seconds
     );
 
-    temp_components::paragraph(
+    shared::paragraph::paragraph(
         vec![Line::from(timestamp_bar), Line::from(timestamp)],
         timestamp_block,
     )
@@ -152,13 +155,13 @@ pub fn main_header(
     .render(header_area[1], buf);
 
     let tab_block =
-        temp_components::bordered_block(Line::default(), ui_config.colors["colors"].border)
+        shared::block::bordered_block(Line::default(), ui_config.colors["colors"].border)
             .title(" ● ")
             .title_style(Style::new().fg(ui_config.colors["colors"].title));
 
     let spinner = ui_config.animations["animations"].spinner.clone();
 
-    temp_components::tabs(
+    shared::tab::tabs(
         state.selected_tab,
         tab_block,
         state.animations.animation_spinner.0,
@@ -174,7 +177,7 @@ pub fn main_header(
         if let Some(val) = &report.log {
             match level {
                 LogLevel::INFO => {
-                    temp_components::unbordered_block(Line::from(format!(" ⚬ {}", val)))
+                    shared::block::unbordered_block(Line::from(format!(" ⚬ {}", val)))
                         .title_style(Style::default().fg(ui_config.colors["colors"].success))
                         .render(tab_area[1], buf)
                 }
