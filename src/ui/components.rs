@@ -19,8 +19,8 @@ use crate::{
     ignite::Paths,
 };
 
-mod shared;
 mod tabs;
+mod shared;
 
 pub fn main_header(
     song_name_area: Rect,

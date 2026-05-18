@@ -7,6 +7,7 @@ mod ignite;
 mod logger;
 mod result;
 mod ui;
+mod event;
 
 #[tokio::main]
 async fn main() -> result::EchoResult<()> {

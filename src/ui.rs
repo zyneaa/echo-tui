@@ -27,18 +27,17 @@ use crate::{
 use crate::{config::UiConfig, ignite::Paths};
 
 pub mod actions;
-pub mod event;
 pub mod layout;
 pub mod components;
 
 pub struct EchoCanvas {
-    state: State,
-    ui_config: UiConfig,
-    db_connection_pool: SqlitePool,
-    audio_player: AudioPlayer,
-    audio_state: Option<Arc<Mutex<AudioData>>>,
-    report_rx: Receiver<Report>,
-    all_paths: Paths,
+    pub state: State,
+    pub ui_config: UiConfig,
+    pub db_connection_pool: SqlitePool,
+    pub audio_player: AudioPlayer,
+    pub audio_state: Option<Arc<Mutex<AudioData>>>,
+    pub report_rx: Receiver<Report>,
+    pub all_paths: Paths,
 }
 
 impl EchoCanvas {

@@ -4,7 +4,6 @@ use tokio::fs;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use super::EchoCanvas;
 use crate::app::{DownloadState, EchoSubTab, LogLevel, PlaylistSubTab, Report};
 use crate::awdio::AudioPlayer;
 use crate::awdio::metadata::Metadata;
@@ -12,7 +11,8 @@ use crate::awdio::song::Song;
 use crate::db;
 use crate::download;
 use crate::result::{EchoReport, EchoResult};
-use crate::{app::SelectedTab, awdio::skip, ui::AudioData};
+use crate::ui::EchoCanvas;
+use crate::{app::SelectedTab, awdio::skip, awdio::AudioData};
 
 impl EchoCanvas {
     pub async fn handle_events(&mut self, evt: Event) -> EchoResult<()> {
