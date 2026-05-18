@@ -1,5 +1,8 @@
 use ratatui::{
-    layout::Constraint, style::{Color, Modifier, Style}, text::Text, widgets::{Cell, Row, Table}
+    layout::Constraint,
+    style::{Color, Modifier, Style},
+    text::Text,
+    widgets::{Cell, Row, Table},
 };
 
 use crate::{app::EchoSubTab, awdio::song::Song, db::Playlist};

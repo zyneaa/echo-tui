@@ -42,7 +42,7 @@ impl Widget for &EchoCanvas {
             &self.state,
             &self.ui_config,
             &self.audio_state,
-            &self.all_paths
+            &self.all_paths,
         );
     }
 }

@@ -42,7 +42,7 @@ pub struct AnimationState {
     pub animation_hpulse: (usize, usize),
     pub animation_dot: (usize, usize),
 
-    pub is_blink: bool
+    pub is_blink: bool,
 }
 
 #[derive(Debug)]
@@ -168,7 +168,7 @@ impl EchoTabState {
             is_zero_local_song: true,
             metadata_buffer: "".into(),
             search_buffer: "".into(),
-            import_buffer: "".into()
+            import_buffer: "".into(),
         }
     }
 }

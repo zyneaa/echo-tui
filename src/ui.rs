@@ -27,8 +27,8 @@ use crate::{
 use crate::{config::UiConfig, ignite::Paths};
 
 pub mod actions;
-pub mod layout;
 pub mod components;
+pub mod layout;
 
 pub struct EchoCanvas {
     pub state: State,
@@ -57,7 +57,7 @@ impl EchoCanvas {
             audio_player,
             audio_state,
             report_rx,
-            all_paths
+            all_paths,
         }
     }
 

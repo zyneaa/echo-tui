@@ -1,4 +1,7 @@
-use crate::{awdio::{metadata::Metadata, song::Song}, result::EchoResult};
+use crate::{
+    awdio::{metadata::Metadata, song::Song},
+    result::EchoResult,
+};
 use sqlx::sqlite::SqlitePool;
 
 #[derive(Debug, Clone)]

@@ -15,9 +15,7 @@ impl Song {
     }
 
     pub fn new_temp(path: String, metadata: Metadata) -> Self {
-        Song {
-            metadata, path
-        }
+        Song { metadata, path }
     }
 
     pub fn ref_array(&self) -> [&String; 3] {

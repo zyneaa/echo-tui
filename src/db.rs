@@ -51,9 +51,13 @@ pub async fn insert_song(
 }
 
 pub async fn update_song_path(pool: &SqlitePool, song_id: i64, new_path: &str) -> EchoResult<()> {
-    sqlx::query!("UPDATE songs SET file_path = ? WHERE id = ?", new_path, song_id)
-        .execute(pool)
-        .await?;
+    sqlx::query!(
+        "UPDATE songs SET file_path = ? WHERE id = ?",
+        new_path,
+        song_id
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -126,12 +130,11 @@ pub async fn add_song_to_playlist(
     playlist_id: i64,
     song_path: &str,
 ) -> EchoResult<()> {
-    let row: (Option<i32>,) = sqlx::query_as(
-        "SELECT MAX(order_index) FROM playlist_songs WHERE playlist_id = ?",
-    )
-    .bind(playlist_id)
-    .fetch_one(pool)
-    .await?;
+    let row: (Option<i32>,) =
+        sqlx::query_as("SELECT MAX(order_index) FROM playlist_songs WHERE playlist_id = ?")
+            .bind(playlist_id)
+            .fetch_one(pool)
+            .await?;
 
     let next_order = row.0.unwrap_or(0) + 1;
 

@@ -1,6 +1,11 @@
 use std::path::Path;
 
-use ratatui::{style::{Color, Modifier, Style}, symbols::border, text::{Line, Span}, widgets::{Block, Borders}};
+use ratatui::{
+    style::{Color, Modifier, Style},
+    symbols::border,
+    text::{Line, Span},
+    widgets::{Block, Borders},
+};
 
 use crate::app::EchoSubTab;
 
